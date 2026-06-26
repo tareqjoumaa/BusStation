@@ -1,0 +1,935 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Routes — Bus Station{% endblock %}
+{% block breadcrumb %}Company / Routes{% endblock %}
+{% block page_title %}Bus Routes{% endblock %}
+{% block nav_routes %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/bus_routes.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="routeSearch" placeholder="Search by city or office..." />
+    </div>
+    <select class="filter-select" id="filterOffice">
+      <option value="">All Offices</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <!-- Card / List view toggle -->
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGrid" title="Card view" onclick="setView('grid')">
+        <i class="fas fa-th-large"></i>
+      </button>
+      <button class="view-btn" id="btnList" title="List view" onclick="setView('list')">
+        <i class="fas fa-list"></i>
+      </button>
+    </div>
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-plus"></i> New Route
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPI Stats -->
+<div class="rt-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#06b6d4">
+    <div class="kpi-icon"><i class="fas fa-route"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Routes</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-map"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#8b5cf6">
+    <div class="kpi-icon"><i class="fas fa-building"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statOffices">0</span>
+      <span class="kpi-label">Offices Covered</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-city"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-map-marker-alt"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statCities">0</span>
+      <span class="kpi-label">Unique Cities</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-globe"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#ec4899">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- ── CARD GRID VIEW ─────────────────────────────── -->
+<div id="gridView">
+  <div class="grid-loading" id="gridLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading routes...</span>
+  </div>
+  <div class="routes-grid" id="routesGrid" style="display:none"></div>
+  <div class="empty-state" id="gridEmpty" style="display:none">
+    <div class="empty-icon"><i class="fas fa-route"></i></div>
+    <h3 class="empty-title">No routes found</h3>
+    <p class="empty-desc">Try adjusting your search or create a new route.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Route</button>
+  </div>
+  <!-- Grid pagination -->
+  <div class="pagination" id="gridPagination" style="display:none">
+    <button class="page-btn" id="gridPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="gridPageInfo">Page 1</span>
+    <button class="page-btn" id="gridNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<!-- ── LIST TABLE VIEW ────────────────────────────── -->
+<div id="listView" style="display:none">
+  <div class="table-card">
+    <div class="table-loading" id="tableLoading" style="display:none">
+      <div class="loading-spinner"></div>
+      <span>Loading routes...</span>
+    </div>
+    <div class="table-scroll" id="tableWrap" style="display:none">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>Route</th>
+            <th>Office</th>
+            <th>Created</th>
+            <th style="width:110px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="routeBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="listEmpty" style="display:none">
+      <div class="empty-icon"><i class="fas fa-route"></i></div>
+      <h3 class="empty-title">No routes found</h3>
+      <p class="empty-desc">Try adjusting your search or create a new route.</p>
+      <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Route</button>
+    </div>
+    <div class="pagination" id="listPagination" style="display:none">
+      <button class="page-btn" id="listPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+      <span class="page-info" id="listPageInfo">Page 1</span>
+      <button class="page-btn" id="listNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     VIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-route"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewModalTitle">Route Details</h3>
+        <p class="modal-subtitle" id="viewModalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="viewContent">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-primary" id="viewEditBtn"><i class="fas fa-pen"></i> Edit</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     CREATE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Route</h3>
+        <p class="modal-subtitle">Define a new bus route between two cities</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+
+    <div class="modal-body">
+      <!-- Live route preview -->
+      <div class="modal-route-preview" id="createPreview">
+        <span class="mrp-city placeholder" id="cpFrom">Select departure city</span>
+        <i class="fas fa-long-arrow-alt-right mrp-arrow"></i>
+        <span class="mrp-city placeholder" id="cpTo">Select destination city</span>
+      </div>
+
+      <div class="form-fields">
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-building"></i> Office <span class="req">*</span></label>
+          <select class="form-input" id="cOfficeId" onchange="updateCreatePreview()">
+            <option value="">Select office...</option>
+          </select>
+          <span class="form-field-error" id="cOfficeErr"></span>
+        </div>
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-map-marker-alt"></i> From City <span class="req">*</span></label>
+          <select class="form-input" id="cFromCity" onchange="updateCreatePreview()">
+            <option value="">Select departure city...</option>
+          </select>
+          <span class="form-field-error" id="cFromErr"></span>
+        </div>
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-map-pin"></i> To City <span class="req">*</span></label>
+          <select class="form-input" id="cToCity" onchange="updateCreatePreview()">
+            <option value="">Select destination city...</option>
+          </select>
+          <span class="form-field-error" id="cToErr"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create Route</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     EDIT MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Route</h3>
+        <p class="modal-subtitle" id="editModalSub">Update route cities</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+
+    <div class="modal-body">
+      <!-- Live route preview -->
+      <div class="modal-route-preview" id="editPreview">
+        <span class="mrp-city" id="epFrom">—</span>
+        <i class="fas fa-long-arrow-alt-right mrp-arrow"></i>
+        <span class="mrp-city" id="epTo">—</span>
+      </div>
+
+      <div class="form-fields">
+        <input type="hidden" id="editRouteId" />
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-map-marker-alt"></i> From City <span class="req">*</span></label>
+          <select class="form-input" id="eFromCity" onchange="updateEditPreview()">
+            <option value="">Select departure city...</option>
+          </select>
+          <span class="form-field-error" id="eFromErr"></span>
+        </div>
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-map-pin"></i> To City <span class="req">*</span></label>
+          <select class="form-input" id="eToCity" onchange="updateEditPreview()">
+            <option value="">Select destination city...</option>
+          </select>
+          <span class="form-field-error" id="eToErr"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     DELETE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-trash"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Route?</h3>
+        <p class="modal-subtitle" id="deleteModalSub">This action cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete route <strong id="deleteRouteName">—</strong>. All associated data will be lost.</p>
+      </div>
+      <div class="modal-error" id="deleteError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="deleteErrorMsg"></span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" onclick="submitDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete Route</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allRoutes      = [];
+let allCities      = [];
+let allOffices     = [];
+let filteredRoutes = [];
+let currentPage    = 1;
+const PAGE_SIZE    = 12;   // 12 looks great in a 3-col grid
+let currentView    = 'grid';
+let pendingDeleteId = null;
+
+// ── Toast fallback ────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = function(msg, type) {
+    const e = document.getElementById('_rtToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_rtToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#06b6d4';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);`;
+    const ic = type === 'success' ? 'check-circle' : type === 'error' ? 'trash' : 'info-circle';
+    t.innerHTML = `<i class="fas fa-${ic}"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF')) {
+      const s = document.createElement('style'); s.id = '_tKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  document.getElementById('routeSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterOffice').addEventListener('change', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape')
+      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load all data ─────────────────────────────────────
+async function loadAll() {
+  setLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const [routesRes, citiesRes, officesRes] = await Promise.all([
+      fetch('/api/routes/'),
+      fetch('/api/routes/cities/'),
+      fetch('/api/routes/offices/'),
+    ]);
+    const routesData  = await routesRes.json();
+    const citiesData  = await citiesRes.json();
+    const officesData = await officesRes.json();
+
+    if (!routesRes.ok) throw new Error(routesData.error || 'HTTP ' + routesRes.status);
+
+    allRoutes  = Array.isArray(routesData.result)  ? routesData.result  : Array.isArray(routesData)  ? routesData  : [];
+    allCities  = Array.isArray(citiesData.result)  ? citiesData.result  : Array.isArray(citiesData)  ? citiesData  : [];
+    allOffices = Array.isArray(officesData.result) ? officesData.result : Array.isArray(officesData) ? officesData : [];
+
+    populateFilterDropdown();
+    populateFormDropdowns();
+    applyFilters();
+
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load routes: ' + err.message;
+    setLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+function populateFilterDropdown() {
+  const sel = document.getElementById('filterOffice');
+  sel.innerHTML = '<option value="">All Offices</option>';
+  allOffices.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.id; opt.textContent = o.name || `Office #${o.id}`;
+    sel.appendChild(opt);
+  });
+}
+
+function populateFormDropdowns() {
+  // Office (create only)
+  const cOff = document.getElementById('cOfficeId');
+  cOff.innerHTML = '<option value="">Select office...</option>';
+  allOffices.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.id; opt.textContent = o.name || `Office #${o.id}`;
+    cOff.appendChild(opt);
+  });
+
+    // Cities (create + edit)
+    ['cFromCity', 'cToCity', 'eFromCity', 'eToCity'].forEach(id => {
+    const sel = document.getElementById(id);
+    const isFrom = id.includes('From');
+
+    sel.innerHTML = `
+        <option value="">
+        ${isFrom ? 'Select departure city...' : 'Select destination city...'}
+        </option>
+    `;
+
+    allCities.forEach(c => {
+        const opt = document.createElement('option');
+
+        opt.value = c.id;
+
+        // FIX HERE
+        opt.textContent = c.name || `City #${c.id}`;
+
+        sel.appendChild(opt);
+    });
+    });
+}
+
+// ── View toggle ───────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('gridView').style.display = v === 'grid' ? 'block' : 'none';
+  document.getElementById('listView').style.display = v === 'list' ? 'block' : 'none';
+  document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('btnList').classList.toggle('active', v === 'list');
+  renderContent();
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q   = document.getElementById('routeSearch').value.toLowerCase().trim();
+  const oid = document.getElementById('filterOffice').value;
+
+  filteredRoutes = allRoutes.filter(r => {
+    const text = `
+    ${r.fromCityName || ''}
+    ${r.toCityName || ''}
+    ${r.officeName || ''}
+    `.toLowerCase();
+    const offOk = !oid || String(r.busCompanyOfficeId) === oid;
+    return (!q || text.includes(q)) && offOk;
+  });
+  currentPage = 1;
+  renderContent();
+  updateKPIs();
+}
+
+function renderContent() {
+  if (currentView === 'grid') renderGrid();
+  else renderTable();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const officeSet = new Set(allRoutes.map(r => r.busCompanyOfficeId));
+  const citySet   = new Set([...allRoutes.map(r => r.fromCityId), ...allRoutes.map(r => r.toCityId)]);
+  document.getElementById('statTotal').textContent   = allRoutes.length;
+  document.getElementById('statOffices').textContent = officeSet.size;
+  document.getElementById('statCities').textContent  = citySet.size;
+  document.getElementById('statShowing').textContent = filteredRoutes.length;
+}
+
+// ── GRID RENDER ───────────────────────────────────────
+function renderGrid() {
+  setLoading(false);
+  const grid   = document.getElementById('routesGrid');
+  const empty  = document.getElementById('gridEmpty');
+  const pag    = document.getElementById('gridPagination');
+
+  if (filteredRoutes.length === 0) {
+    grid.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.style.display  = 'grid';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredRoutes.slice(start, start + PAGE_SIZE);
+
+  grid.innerHTML = page.map((r, i) => {
+    const joined = r.createdOn
+      ? new Date(r.createdOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—';
+    const safeRoute = `${r.fromCityName} → ${r.toCityName}`.replace(/'/g, "\\'");
+
+    return `
+    <div class="route-card" style="animation-delay:${i * 30}ms">
+      <div class="rc-header">
+        <span class="rc-id"><i class="fas fa-hashtag" style="font-size:9px;margin-right:3px"></i>${r.id}</span>
+        <span class="rc-office"><i class="fas fa-building"></i> ${r.officeName || '—'}</span>
+      </div>
+
+      <div class="rc-journey">
+        <!-- FROM city -->
+        <div class="rc-city" style="align-items:flex-start">
+          <div class="rc-city-dot"></div>
+          <span class="rc-city-label">From</span>
+          <span class="rc-city-name" title="${r.fromCityNameEn}">${r.fromCityName}</span>
+          <span class="rc-city-name-ar">${r.fromCityNameAr || ''}</span>
+        </div>
+
+        <!-- Animated track -->
+        <div class="rc-track">
+          <div class="rc-track-line">
+            <div class="rc-track-dot"></div>
+          </div>
+          <i class="fas fa-bus rc-track-icon"></i>
+        </div>
+
+        <!-- TO city -->
+        <div class="rc-city" style="align-items:flex-end;text-align:right">
+          <div class="rc-city-dot dest" style="align-self:flex-end"></div>
+          <span class="rc-city-label">To</span>
+          <span class="rc-city-name" title="${r.toCityNameEn}">${r.toCityName}</span>
+          <span class="rc-city-name-ar">${r.toCityNameAr || ''}</span>
+        </div>
+      </div>
+
+      <div class="rc-footer">
+        <span class="rc-date"><i class="fas fa-calendar-alt" style="margin-right:5px;opacity:.5"></i>${joined}</span>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${r.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModal(${r.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${r.id},'${safeRoute}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  renderPagination('grid');
+}
+
+// ── TABLE RENDER ──────────────────────────────────────
+function renderTable() {
+  setLoading(false);
+  const wrap  = document.getElementById('tableWrap');
+  const empty = document.getElementById('listEmpty');
+  const pag   = document.getElementById('listPagination');
+
+  if (filteredRoutes.length === 0) {
+    wrap.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.style.display  = 'block';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredRoutes.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('routeBody').innerHTML = page.map((r, i) => {
+    const joined = r.createdOn
+      ? new Date(r.createdOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—';
+    const safeRoute = `${r.fromCityName} → ${r.toCityName}`.replace(/'/g, "\\'");
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${r.id}</span></td>
+      <td>
+        <div class="journey-inline">
+          <div class="journey-city">
+            <span class="journey-city-name">${r.fromCityName}</span>
+            <span class="journey-city-ar">${r.fromCityNameAr || ''}</span>
+          </div>
+          <div class="journey-arrow">
+            <div class="journey-arrow-line"></div>
+            <i class="fas fa-bus journey-arrow-bus"></i>
+          </div>
+          <div class="journey-city">
+            <span class="journey-city-name">${r.toCityName}</span>
+            <span class="journey-city-ar">${r.toCityNameAr || ''}</span>
+          </div>
+        </div>
+      </td>
+      <td><span class="office-tag"><i class="fas fa-building"></i> ${r.officeName || '—'}</span></td>
+      <td><span class="date-text">${joined}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${r.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModal(${r.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${r.id},'${safeRoute}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination('list');
+}
+
+function renderPagination(view) {
+  const total   = Math.ceil(filteredRoutes.length / PAGE_SIZE);
+  const pagEl   = document.getElementById(view === 'grid' ? 'gridPagination' : 'listPagination');
+  const prevBtn = document.getElementById(view === 'grid' ? 'gridPrevBtn'   : 'listPrevBtn');
+  const nextBtn = document.getElementById(view === 'grid' ? 'gridNextBtn'   : 'listNextBtn');
+  const info    = document.getElementById(view === 'grid' ? 'gridPageInfo'  : 'listPageInfo');
+
+  pagEl.style.display   = total > 1 ? 'flex' : 'none';
+  info.textContent      = `Page ${currentPage} of ${total}`;
+  prevBtn.disabled      = currentPage === 1;
+  nextBtn.disabled      = currentPage === total;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredRoutes.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderContent();
+}
+
+// ── Loading state ─────────────────────────────────────
+function setLoading(loading) {
+  document.getElementById('gridLoading').style.display  = loading ? 'flex' : 'none';
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('routesGrid').style.display = 'none';
+    document.getElementById('gridEmpty').style.display  = 'none';
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('listEmpty').style.display  = 'none';
+  }
+}
+
+// ── View modal ────────────────────────────────────────
+async function openViewModal(routeId) {
+  document.getElementById('viewModal').style.display  = 'flex';
+  document.getElementById('viewModalTitle').textContent = 'Loading...';
+  document.getElementById('viewModalSub').textContent  = `Route #${routeId}`;
+  document.getElementById('viewContent').innerHTML =
+    '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+
+  try {
+    const res  = await fetch(`/api/routes/${routeId}/`);
+    const data = await res.json();
+    const r    = data.result || data;
+
+    const joined = r.createdOn
+      ? new Date(r.createdOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+      : '—';
+
+    document.getElementById('viewModalTitle').textContent = `${r.fromCityName} → ${r.toCityName}`;
+    document.getElementById('viewModalSub').textContent   = `Route #${r.id} · ${r.officeName}`;
+
+    document.getElementById('viewContent').innerHTML = `
+      <!-- Big visual route display -->
+      <div class="route-preview">
+        <div class="rp-city">
+          <span class="rp-label">Departure</span>
+          <span class="rp-name">${r.fromCityName}</span>
+          <span class="rp-name-ar">${r.fromCityNameAr || ''}</span>
+        </div>
+        <div class="rp-track">
+          <div class="rp-line"><div class="rp-dot"></div></div>
+          <i class="fas fa-bus rp-bus" style="margin-top:6px"></i>
+        </div>
+        <div class="rp-city" style="text-align:right">
+          <span class="rp-label">Destination</span>
+          <span class="rp-name">${r.toCityName}</span>
+          <span class="rp-name-ar">${r.toCityNameAr || ''}</span>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="info-rows">
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-hashtag"></i> Route ID</span>
+          <span class="info-value"><span class="id-badge">#${r.id}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-building"></i> Office</span>
+          <span class="info-value"><span class="office-tag"><i class="fas fa-building"></i> ${r.officeName}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-map-marker-alt"></i> From City (EN)</span>
+          <span class="info-value">${r.fromCityNameEn}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-map-marker-alt"></i> From City (AR)</span>
+          <span class="info-value" style="font-family:inherit;direction:rtl">${r.fromCityNameAr}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-map-pin"></i> To City (EN)</span>
+          <span class="info-value">${r.toCityNameEn}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-map-pin"></i> To City (AR)</span>
+          <span class="info-value" style="font-family:inherit;direction:rtl">${r.toCityNameAr}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-calendar-alt"></i> Created</span>
+          <span class="info-value">${joined}</span>
+        </div>
+      </div>`;
+
+    document.getElementById('viewEditBtn').onclick = () => {
+      closeModal('viewModal');
+      openEditModal(r.id, r);
+    };
+  } catch (err) {
+    document.getElementById('viewContent').innerHTML =
+      `<p style="color:#f87171;padding:1rem;text-align:center">Failed to load route details.</p>`;
+  }
+}
+
+// ── Create modal ──────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('cOfficeId').value = '';
+  document.getElementById('cFromCity').value = '';
+  document.getElementById('cToCity').value   = '';
+  ['cOfficeErr','cFromErr','cToErr'].forEach(id => document.getElementById(id).textContent = '');
+  updateCreatePreview();
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+}
+
+function updateCreatePreview() {
+  const fromSel = document.getElementById('cFromCity');
+  const toSel   = document.getElementById('cToCity');
+  const fromTxt = fromSel.options[fromSel.selectedIndex]?.text || '';
+  const toTxt   = toSel.options[toSel.selectedIndex]?.text   || '';
+
+  const fpEl = document.getElementById('cpFrom');
+  const tpEl = document.getElementById('cpTo');
+
+  if (fromSel.value) { fpEl.textContent = fromTxt; fpEl.classList.remove('placeholder'); }
+  else               { fpEl.textContent = 'Select departure city'; fpEl.classList.add('placeholder'); }
+  if (toSel.value)   { tpEl.textContent = toTxt;   tpEl.classList.remove('placeholder'); }
+  else               { tpEl.textContent = 'Select destination city'; tpEl.classList.add('placeholder'); }
+}
+
+async function submitCreate() {
+  const officeId = document.getElementById('cOfficeId').value;
+  const fromId   = document.getElementById('cFromCity').value;
+  const toId     = document.getElementById('cToCity').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(officeId, 'cOfficeErr', 'Please select an office');
+  req(fromId,   'cFromErr',   'Please select a departure city');
+  req(toId,     'cToErr',     'Please select a destination city');
+  if (fromId && toId && fromId === toId) {
+    document.getElementById('cToErr').textContent = 'Departure and destination must be different';
+    valid = false;
+  }
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/routes/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        busCompanyOfficeId: parseInt(officeId),
+        fromCityId:         parseInt(fromId),
+        toCityId:           parseInt(toId),
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      const from = document.getElementById('cFromCity').options[document.getElementById('cFromCity').selectedIndex].text;
+      const to   = document.getElementById('cToCity').options[document.getElementById('cToCity').selectedIndex].text;
+      showToast(`Route "${from} → ${to}" created`, 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create route.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────
+async function openEditModal(routeId, routeData) {
+  // If routeData not passed (called from table), find in allRoutes
+  const r = routeData || allRoutes.find(x => x.id === routeId);
+  if (!r) return;
+
+  document.getElementById('editRouteId').value = r.id;
+  document.getElementById('eFromCity').value   = r.fromCityId || '';
+  document.getElementById('eToCity').value     = r.toCityId   || '';
+  document.getElementById('editModalSub').textContent = `Route #${r.id}`;
+  ['eFromErr','eToErr'].forEach(id => document.getElementById(id).textContent = '');
+  updateEditPreview();
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function updateEditPreview() {
+  const fromSel = document.getElementById('eFromCity');
+  const toSel   = document.getElementById('eToCity');
+  document.getElementById('epFrom').textContent = fromSel.value
+    ? fromSel.options[fromSel.selectedIndex].text : '—';
+  document.getElementById('epTo').textContent   = toSel.value
+    ? toSel.options[toSel.selectedIndex].text   : '—';
+}
+
+async function submitEdit() {
+  const id     = parseInt(document.getElementById('editRouteId').value);
+  const fromId = document.getElementById('eFromCity').value;
+  const toId   = document.getElementById('eToCity').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(fromId, 'eFromErr', 'Please select a departure city');
+  req(toId,   'eToErr',   'Please select a destination city');
+  if (fromId && toId && fromId === toId) {
+    document.getElementById('eToErr').textContent = 'Departure and destination must be different';
+    valid = false;
+  }
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/routes/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ id, fromCityId: parseInt(fromId), toCityId: parseInt(toId) }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast('Route updated successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update route.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── Delete ────────────────────────────────────────────
+function openDeleteModal(routeId, routeLabel) {
+  pendingDeleteId = routeId;
+  document.getElementById('deleteRouteName').textContent = routeLabel;
+  document.getElementById('deleteModalSub').textContent  = `Route #${routeId}`;
+  document.getElementById('deleteError').style.display   = 'none';
+  document.getElementById('deleteModal').style.display   = 'flex';
+}
+
+async function submitDelete() {
+  if (!pendingDeleteId) return;
+  setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+  document.getElementById('deleteError').style.display = 'none';
+  try {
+    const res = await fetch(`/api/routes/delete/${pendingDeleteId}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast('Route deleted successfully', 'error');
+      allRoutes      = allRoutes.filter(r => r.id !== pendingDeleteId);
+      filteredRoutes = filteredRoutes.filter(r => r.id !== pendingDeleteId);
+      renderContent(); updateKPIs();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete route.';
+      document.getElementById('deleteError').style.display = 'flex';
+      document.getElementById('deleteErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('deleteError').style.display = 'flex';
+    document.getElementById('deleteErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+    pendingDeleteId = null;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled        = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

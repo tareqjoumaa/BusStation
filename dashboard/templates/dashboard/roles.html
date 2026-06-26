@@ -1,0 +1,535 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Roles & Permissions — Bus Station{% endblock %}
+{% block breadcrumb %}Roles & Permissions{% endblock %}
+{% block page_title %}Roles & Permissions{% endblock %}
+{% block nav_roles %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/roles.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- ── TOP: ADD ROLE SECTION ────────────────────────── -->
+<div class="section-card" id="addRoleSection">
+  <div class="section-header">
+    <div class="section-icon"><i class="fas fa-shield-alt"></i></div>
+    <div>
+      <h3 class="section-title">Create New Role</h3>
+      <p class="section-sub">Define a system-wide or company-specific role</p>
+    </div>
+  </div>
+
+  <div class="add-role-body">
+
+    <div class="add-role-fields">
+
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-tag"></i> Role Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="roleNameInput"
+               placeholder='e.g. "Driver", "Reservation Manager"'
+               onkeydown="if(event.key==='Enter') submitCreateRole()" />
+        <span class="form-field-error" id="roleNameErr"></span>
+      </div>
+
+      <div class="system-role-toggle">
+        <label class="toggle-label" id="systemRoleLabel">
+          <div class="custom-checkbox" id="systemRoleCheck" onclick="toggleSystemRole()">
+            <i class="fas fa-check check-icon"></i>
+          </div>
+          <div class="toggle-text">
+            <span class="toggle-title">System Role</span>
+            <span class="toggle-desc" id="toggleDesc">
+              Applies globally — no company needed
+            </span>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-field" id="companySelectField" style="display:none">
+        <label class="form-label"><i class="fas fa-industry"></i> Bus Company <span class="req">*</span></label>
+        <select class="form-input" id="companySelect">
+          <option value="">Loading companies...</option>
+        </select>
+        <span class="form-field-error" id="companyErr"></span>
+      </div>
+
+    </div>
+
+    <div class="add-role-error" id="addRoleError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i>
+      <span id="addRoleErrorMsg"></span>
+    </div>
+
+    <div class="add-role-footer">
+      <button class="btn-primary" id="addRoleBtn" onclick="submitCreateRole()">
+        <span id="addRoleBtnLabel"><i class="fas fa-plus"></i> Add Role</span>
+        <span id="addRoleBtnLoading" style="display:none">
+          <span class="btn-spinner"></span> Creating...
+        </span>
+      </button>
+      <div class="role-success-msg" id="roleSuccessMsg" style="display:none">
+        <i class="fas fa-check-circle"></i> Role created successfully!
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── BOTTOM: PERMISSIONS SECTION ─────────────────── -->
+<div class="section-card" id="permissionsSection">
+  <div class="section-header">
+    <div class="section-icon purple"><i class="fas fa-key"></i></div>
+    <div>
+      <h3 class="section-title">Manage Permissions</h3>
+      <p class="section-sub">Select a role to view and assign its permissions</p>
+    </div>
+    <div class="section-header-right">
+      <button class="btn-secondary sm" onclick="loadRoles(); loadAllClaims()">
+        <i class="fas fa-sync-alt" id="refreshRolesIcon"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Role selector -->
+  <div class="role-selector-wrap">
+    <label class="form-label"><i class="fas fa-shield-alt"></i> Select Role</label>
+    <div class="role-selector-row">
+      <div class="role-select-loading" id="rolesLoading">
+        <div class="loading-spinner sm"></div> Loading roles...
+      </div>
+      <select class="form-input role-select" id="roleSelect" style="display:none"
+              onchange="onRoleSelected()">
+        <option value="">— Choose a role to manage —</option>
+      </select>
+      <div class="selected-role-badge" id="selectedRoleBadge" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Permissions table area -->
+  <div id="permissionsArea" style="display:none">
+
+    <div class="perms-toolbar">
+      <div class="perms-search-wrap">
+        <i class="fas fa-search"></i>
+        <input type="text" id="permSearch"
+               placeholder="Search permissions..."
+               oninput="filterPermissions()" />
+      </div>
+      <div class="perms-toolbar-right">
+        <span class="perms-count" id="permsCount">0 permissions</span>
+        <button class="btn-ghost" onclick="selectAll(true)">
+          <i class="fas fa-check-double"></i> Select All
+        </button>
+        <button class="btn-ghost" onclick="selectAll(false)">
+          <i class="fas fa-times"></i> Clear All
+        </button>
+      </div>
+    </div>
+
+    <div class="perms-loading" id="permsLoading" style="display:none">
+      <div class="loading-spinner"></div>
+      <span>Loading permissions for this role...</span>
+    </div>
+
+    <div class="perms-table-wrap" id="permsTableWrap">
+      <table class="perms-table" id="permsTable">
+        <thead>
+          <tr>
+            <th class="col-select">
+              <div class="custom-checkbox sm" id="selectAllCheck"
+                   onclick="toggleSelectAll()">
+                <i class="fas fa-check check-icon"></i>
+              </div>
+            </th>
+            <th class="col-name">Permission Name</th>
+            <th class="col-key">Permission Key</th>
+            <th class="col-status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="permsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Save button -->
+    <div class="save-perms-row">
+      <div class="save-info" id="saveInfo">
+        <span id="selectedCount">0</span> permissions selected
+      </div>
+      <div class="save-right">
+        <div class="save-success" id="saveSuccess" style="display:none">
+          <i class="fas fa-check-circle"></i> Permissions saved!
+        </div>
+        <button class="btn-primary save-btn" id="savePermsBtn" onclick="savePermissions()">
+          <span id="saveBtnLabel"><i class="fas fa-save"></i> Save Permissions</span>
+          <span id="saveBtnLoading" style="display:none">
+            <span class="btn-spinner"></span> Saving...
+          </span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Empty/placeholder state -->
+  <div class="perms-placeholder" id="permsPlaceholder">
+    <div class="pp-icon"><i class="fas fa-shield-alt"></i></div>
+    <p class="pp-text">Select a role above to view and manage its permissions</p>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let isSystemRole      = true;
+let allRoles          = [];
+let allClaims         = [];
+let roleClaims        = new Set();   // permissionIds assigned to selected role
+let selectedRoleId    = null;
+let selectAllState    = false;
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadRoles();
+  loadAllClaims();
+  loadCompanies();
+});
+
+// ── System role toggle ────────────────────────────────
+function toggleSystemRole() {
+  isSystemRole = !isSystemRole;
+  const check = document.getElementById('systemRoleCheck');
+  const field = document.getElementById('companySelectField');
+  const desc  = document.getElementById('toggleDesc');
+
+  check.classList.toggle('checked', isSystemRole);
+  field.style.display = isSystemRole ? 'none' : 'block';
+  desc.textContent = isSystemRole
+    ? 'Applies globally — no company needed'
+    : 'Applies to a specific bus company';
+}
+
+// Init as checked
+document.getElementById('systemRoleCheck').classList.add('checked');
+
+// ── Load companies (for dropdown) ─────────────────────
+async function loadCompanies() {
+  try {
+    const res  = await fetch('/api/companies/');
+    const data = await res.json();
+    const list = Array.isArray(data) ? data
+               : Array.isArray(data.result) ? data.result : [];
+
+    const sel = document.getElementById('companySelect');
+    sel.innerHTML = '<option value="">Choose a company...</option>';
+    list.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.error('Companies load failed', e); }
+}
+
+// ── Create role ───────────────────────────────────────
+async function submitCreateRole() {
+  const name = document.getElementById('roleNameInput').value.trim();
+
+  document.getElementById('roleNameErr').textContent  = '';
+  document.getElementById('companyErr').textContent   = '';
+  document.getElementById('addRoleError').style.display = 'none';
+  document.getElementById('roleSuccessMsg').style.display = 'none';
+
+  if (!name) {
+    document.getElementById('roleNameErr').textContent = 'Role name is required';
+    return;
+  }
+
+  let busCompanyId = 0;
+  if (!isSystemRole) {
+    busCompanyId = parseInt(document.getElementById('companySelect').value || 0);
+    if (!busCompanyId) {
+      document.getElementById('companyErr').textContent = 'Please select a company';
+      return;
+    }
+  }
+
+  setBtnLoading('addRoleBtn', 'addRoleBtnLabel', 'addRoleBtnLoading', true);
+
+  try {
+    const res  = await fetch('/api/roles/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ name, busCompanyId, isSystemRole }),
+    });
+    const data = await res.json();
+
+    if (res.ok && !data.hasErrors) {
+      document.getElementById('roleNameInput').value = '';
+      document.getElementById('roleSuccessMsg').style.display = 'flex';
+      setTimeout(() => document.getElementById('roleSuccessMsg').style.display = 'none', 3000);
+      showToast(`Role "${name}" created successfully`, 'success');
+      loadRoles();  // refresh dropdown
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create role.';
+      document.getElementById('addRoleError').style.display = 'flex';
+      document.getElementById('addRoleErrorMsg').textContent = msg;
+    }
+  } catch(err) {
+    document.getElementById('addRoleError').style.display = 'flex';
+    document.getElementById('addRoleErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('addRoleBtn', 'addRoleBtnLabel', 'addRoleBtnLoading', false);
+  }
+}
+
+// ── Load all roles ────────────────────────────────────
+async function loadRoles() {
+  document.getElementById('rolesLoading').style.display = 'flex';
+  document.getElementById('roleSelect').style.display   = 'none';
+  document.getElementById('refreshRolesIcon').classList.add('fa-spin');
+
+  try {
+    const res  = await fetch('/api/roles/');
+    const data = await res.json();
+    allRoles   = Array.isArray(data.result) ? data.result : [];
+
+    const sel = document.getElementById('roleSelect');
+    sel.innerHTML = '<option value="">— Choose a role to manage —</option>';
+    allRoles.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.name + (r.isSystemRole ? ' [System]' : ' [Company]');
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('rolesLoading').style.display = 'none';
+    sel.style.display = 'block';
+  } catch(err) {
+    document.getElementById('rolesLoading').innerHTML =
+      '<span style="color:var(--red)"><i class="fas fa-exclamation-circle"></i> Failed to load roles</span>';
+  } finally {
+    document.getElementById('refreshRolesIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Load all claims ───────────────────────────────────
+async function loadAllClaims() {
+  try {
+    const res  = await fetch('/api/roles/claims/');
+    const data = await res.json();
+    allClaims  = Array.isArray(data.result) ? data.result : [];
+  } catch(err) {
+    console.error('Claims load failed:', err);
+  }
+}
+
+// ── Role selected ─────────────────────────────────────
+async function onRoleSelected() {
+  const roleId = document.getElementById('roleSelect').value;
+  if (!roleId) {
+    document.getElementById('permissionsArea').style.display    = 'none';
+    document.getElementById('permsPlaceholder').style.display   = 'flex';
+    document.getElementById('selectedRoleBadge').style.display  = 'none';
+    return;
+  }
+
+  selectedRoleId = roleId;
+  const role = allRoles.find(r => r.id === roleId);
+
+  // Show selected badge
+  const badge = document.getElementById('selectedRoleBadge');
+  badge.innerHTML = `
+    <span class="role-badge ${role?.isSystemRole ? 'system' : 'company'}">
+      <i class="fas fa-shield-alt"></i> ${role?.name || roleId}
+      <span class="role-type-tag">${role?.isSystemRole ? 'System' : 'Company'}</span>
+    </span>`;
+  badge.style.display = 'flex';
+
+  document.getElementById('permissionsArea').style.display   = 'block';
+  document.getElementById('permsPlaceholder').style.display  = 'none';
+  document.getElementById('permsLoading').style.display      = 'flex';
+  document.getElementById('permsTableWrap').style.display    = 'none';
+  document.getElementById('saveSuccess').style.display       = 'none';
+
+  try {
+    const res  = await fetch(`/api/roles/claims-of-role/?roleId=${roleId}`);
+    const data = await res.json();
+    const assigned = Array.isArray(data.result) ? data.result : [];
+    roleClaims = new Set(assigned.map(c => c.permissionId));
+    renderPermissionsTable();
+  } catch(err) {
+    showToast('Failed to load role permissions', 'error');
+  } finally {
+    document.getElementById('permsLoading').style.display   = 'none';
+    document.getElementById('permsTableWrap').style.display = 'block';
+  }
+}
+
+// ── Render permissions table ──────────────────────────
+function renderPermissionsTable(filter = '') {
+  const q = filter.toLowerCase().trim();
+  const visible = allClaims.filter(c =>
+    !q || c.name.toLowerCase().includes(q)
+  );
+
+  document.getElementById('permsCount').textContent = `${visible.length} permissions`;
+
+  // Group by module (e.g. "Permissions.Customer.View" → "Customer")
+  const groups = {};
+  visible.forEach(c => {
+    const parts  = c.name.split('.');
+    const module = parts[1] || 'General';
+    if (!groups[module]) groups[module] = [];
+    groups[module].push(c);
+  });
+
+  let html = '';
+  let rowIdx = 0;
+
+  Object.keys(groups).sort().forEach(module => {
+    // Group header row
+    html += `
+      <tr class="group-header-row">
+        <td colspan="4">
+          <div class="group-label">
+            <i class="fas fa-folder"></i> ${module}
+            <span class="group-count">${groups[module].length}</span>
+          </div>
+        </td>
+      </tr>`;
+
+    groups[module].forEach(claim => {
+      const checked   = roleClaims.has(claim.permissionId);
+      const parts     = claim.name.split('.');
+      const action    = parts[parts.length - 1] || claim.name;
+      const actionClass = getActionClass(action);
+
+      html += `
+      <tr class="perm-row anim-row" style="--row-delay:${rowIdx * 15}ms"
+          data-id="${claim.permissionId}">
+        <td class="col-select">
+          <div class="custom-checkbox sm ${checked ? 'checked' : ''}"
+               id="cb-${claim.permissionId}"
+               onclick="toggleClaim(${claim.permissionId})">
+            <i class="fas fa-check check-icon"></i>
+          </div>
+        </td>
+        <td class="col-name">
+          <span class="perm-name">${claim.name.replace('Permissions.', '').replace('.', ' → ')}</span>
+        </td>
+        <td class="col-key">
+          <code class="perm-key">${claim.name}</code>
+        </td>
+        <td class="col-status">
+          <span class="action-tag ${actionClass}">${action}</span>
+        </td>
+      </tr>`;
+      rowIdx++;
+    });
+  });
+
+  document.getElementById('permsBody').innerHTML = html;
+  updateSelectedCount();
+}
+
+function getActionClass(action) {
+  const map = {
+    'View':   'tag-view',
+    'Edit':   'tag-edit',
+    'Add':    'tag-add',
+    'Delete': 'tag-delete',
+    'Login':  'tag-view',
+  };
+  return map[action] || 'tag-other';
+}
+
+// ── Toggle single claim ───────────────────────────────
+function toggleClaim(permissionId) {
+  const cb = document.getElementById(`cb-${permissionId}`);
+  if (roleClaims.has(permissionId)) {
+    roleClaims.delete(permissionId);
+    cb.classList.remove('checked');
+  } else {
+    roleClaims.add(permissionId);
+    cb.classList.add('checked');
+  }
+  updateSelectedCount();
+}
+
+// ── Select / deselect all ─────────────────────────────
+function selectAll(state) {
+  allClaims.forEach(c => {
+    state ? roleClaims.add(c.permissionId) : roleClaims.delete(c.permissionId);
+    const cb = document.getElementById(`cb-${c.permissionId}`);
+    if (cb) cb.classList.toggle('checked', state);
+  });
+  updateSelectedCount();
+}
+
+function toggleSelectAll() {
+  selectAllState = !selectAllState;
+  selectAll(selectAllState);
+  document.getElementById('selectAllCheck').classList.toggle('checked', selectAllState);
+}
+
+function updateSelectedCount() {
+  document.getElementById('selectedCount').textContent = roleClaims.size;
+}
+
+// ── Filter permissions ────────────────────────────────
+function filterPermissions() {
+  const q = document.getElementById('permSearch').value;
+  renderPermissionsTable(q);
+}
+
+// ── Save permissions ──────────────────────────────────
+async function savePermissions() {
+  if (!selectedRoleId) return;
+
+  document.getElementById('saveSuccess').style.display = 'none';
+  setBtnLoading('savePermsBtn', 'saveBtnLabel', 'saveBtnLoading', true);
+
+  try {
+    const res  = await fetch('/api/roles/assign-claims/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({
+        roleId:    selectedRoleId,
+        claimsIds: Array.from(roleClaims),
+      }),
+    });
+    const data = await res.json();
+
+    if (res.ok && !data.hasErrors) {
+      document.getElementById('saveSuccess').style.display = 'flex';
+      setTimeout(() => document.getElementById('saveSuccess').style.display = 'none', 3500);
+      showToast('Permissions saved successfully', 'success');
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to save permissions.';
+      showToast(msg, 'error');
+    }
+  } catch(err) {
+    showToast('Network error. Please try again.', 'error');
+  } finally {
+    setBtnLoading('savePermsBtn', 'saveBtnLabel', 'saveBtnLoading', false);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function setBtnLoading(btnId, labelId, loadingId, loading) {
+  document.getElementById(btnId).disabled                   = loading;
+  document.getElementById(labelId).style.display   = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadingId).style.display = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

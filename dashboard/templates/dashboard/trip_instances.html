@@ -1,0 +1,727 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}My Trips — Bus Station{% endblock %}
+{% block breadcrumb %}Company / My Trips{% endblock %}
+{% block page_title %}My Trips{% endblock %}
+{% block nav_trip_instances %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/trip_instances.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="tripSearch" placeholder="Search by route, bus, driver..." />
+    </div>
+    <select class="filter-select" id="filterSchedule">
+      <option value="">All Schedules</option>
+    </select>
+    <select class="filter-select" id="filterCompany">
+      <option value="">All Companies</option>
+    </select>
+    <select class="filter-select" id="filterDate">
+      <option value="">All Dates</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGrid" title="Card view" onclick="setView('grid')">
+        <i class="fas fa-th-large"></i>
+      </button>
+      <button class="view-btn" id="btnList" title="List view" onclick="setView('list')">
+        <i class="fas fa-list"></i>
+      </button>
+    </div>
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPIs -->
+<div class="ti-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#f43f5e">
+    <div class="kpi-icon"><i class="fas fa-ticket-alt"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Trips</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-bus"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-chair"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statAvail">0</span>
+      <span class="kpi-label">Free Seats (Loaded page)</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-check-circle"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#8b5cf6">
+    <div class="kpi-icon"><i class="fas fa-lock"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statResv">0</span>
+      <span class="kpi-label">Reserved Seats (loaded page)</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-user-check"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#f59e0b">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- ── CARD GRID (Boarding-Pass style) ─────────────── -->
+<div id="gridView">
+  <div class="grid-loading" id="gridLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading trips...</span>
+  </div>
+  <div class="trips-grid" id="tripsGrid" style="display:none"></div>
+  <div class="empty-state" id="gridEmpty" style="display:none">
+    <div class="empty-icon"><i class="fas fa-ticket-alt"></i></div>
+    <h3 class="empty-title">No trips found</h3>
+    <p class="empty-desc">Try adjusting your filters.</p>
+  </div>
+  <div class="pagination" id="gridPagination" style="display:none">
+    <button class="page-btn" id="gridPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="gridPageInfo">Page 1</span>
+    <button class="page-btn" id="gridNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<!-- ── LIST TABLE ──────────────────────────────────── -->
+<div id="listView" style="display:none">
+  <div class="table-card">
+    <div class="table-loading" id="tableLoading" style="display:none">
+      <div class="loading-spinner"></div><span>Loading trips...</span>
+    </div>
+    <div class="table-scroll" id="tableWrap" style="display:none">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>Route</th>
+            <th>Departure</th>
+            <th>Arrival</th>
+            <th>Seats</th>
+            <th>Bus / Driver</th>
+            <th style="width:70px">Details</th>
+          </tr>
+        </thead>
+        <tbody id="tripBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="listEmpty" style="display:none">
+      <div class="empty-icon"><i class="fas fa-ticket-alt"></i></div>
+      <h3 class="empty-title">No trips found</h3>
+      <p class="empty-desc">Try adjusting your filters.</p>
+    </div>
+    <div class="pagination" id="listPagination" style="display:none">
+      <button class="page-btn" id="listPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+      <span class="page-info" id="listPageInfo">Page 1</span>
+      <button class="page-btn" id="listNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     VIEW MODAL — Full trip detail + seat map
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap"><i class="fas fa-ticket-alt"></i></div>
+      <div>
+        <h3 class="modal-title" id="vmTitle">Trip Details</h3>
+        <p class="modal-subtitle" id="vmSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="vmContent">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allTrips      = [];
+let allSchedules  = [];
+let allCompanies  = [];
+let filteredTrips = [];
+let currentPage   = 1;
+let currentView   = 'grid';
+const PAGE_SIZE   = 9;
+
+// ── Toast ─────────────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = (msg, type) => {
+    const e = document.getElementById('_tiToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_tiToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f43f5e';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);`;
+    t.innerHTML = `<i class="fas fa-info-circle"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF')) {
+      const s = document.createElement('style'); s.id='_tKF';
+      s.textContent='@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  ['tripSearch','filterSchedule','filterCompany','filterDate'].forEach(id => {
+    document.getElementById(id).addEventListener(id === 'tripSearch' ? 'input' : 'change', applyFilters);
+  });
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape')
+      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load ──────────────────────────────────────────────
+async function loadAll() {
+  setLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const [tripsRes, schedsRes, compsRes] = await Promise.all([
+      fetch('/api/trip-instances/'),
+      fetch('/api/trip-instances/schedules/'),
+      fetch('/api/trip-instances/companies/'),
+    ]);
+    const tripsData  = await tripsRes.json();
+    const schedsData = await schedsRes.json();
+    const compsData  = await compsRes.json();
+
+    if (!tripsRes.ok) throw new Error(tripsData.error || 'HTTP ' + tripsRes.status);
+
+    allTrips     = Array.isArray(tripsData.result)  ? tripsData.result  : Array.isArray(tripsData)  ? tripsData  : [];
+    allSchedules = Array.isArray(schedsData.result) ? schedsData.result : Array.isArray(schedsData) ? schedsData : [];
+    allCompanies = Array.isArray(compsData.result)  ? compsData.result  : Array.isArray(compsData)  ? compsData  : [];
+
+    buildFilterDropdowns();
+    applyFilters();
+
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load trips: ' + err.message;
+    setLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+async function fetchAllSeatCounts() {
+  // Only fetch seats for trips visible on the current page
+  const start      = (currentPage - 1) * PAGE_SIZE;
+  const pageTrips  = filteredTrips.slice(start, start + PAGE_SIZE);
+  const toFetch    = pageTrips.filter(t => !t.tripSeats); // skip already fetched
+
+  if (toFetch.length === 0) return;
+
+  try {
+    const results = await Promise.all(
+      toFetch.map(t =>
+        fetch(`/api/trip-detail/${t.id}/seats/`)
+          .then(r => r.json())
+          .then(d => ({ tripId: t.id, seats: d.result?.seats || [] }))
+          .catch(() => ({ tripId: t.id, seats: [] }))
+      )
+    );
+    results.forEach(({ tripId, seats }) => {
+      const trip = allTrips.find(t => t.id === tripId);
+      if (trip) trip.tripSeats = seats;
+    });
+    // Re-render only the current view to show real seat data
+    renderContent();
+    updateKPIs();
+  } catch (err) {
+    console.warn('Failed to load seat counts:', err);
+  }
+}
+
+function buildFilterDropdowns() {
+  // Schedule filter
+  const sched = document.getElementById('filterSchedule');
+  sched.innerHTML = '<option value="">All Schedules</option>';
+  allSchedules.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = s.routeName || `Schedule #${s.id}`;
+    sched.appendChild(o);
+  });
+
+  // Company filter (derived from trip data since instances don't carry company name directly)
+  const comp = document.getElementById('filterCompany');
+  comp.innerHTML = '<option value="">All Companies</option>';
+  allCompanies.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id;
+    o.textContent = c.name || c.companyName || `Company #${c.id}`;
+    comp.appendChild(o);
+  });
+
+  // Date filter — build unique dates from trips
+  const dates = [...new Set(allTrips.map(t => fmtDateOnly(t.departureTime)))].sort();
+  const dateSel = document.getElementById('filterDate');
+  dateSel.innerHTML = '<option value="">All Dates</option>';
+  dates.forEach(d => {
+    const o = document.createElement('option'); o.value = d; o.textContent = d;
+    dateSel.appendChild(o);
+  });
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q    = document.getElementById('tripSearch').value.toLowerCase().trim();
+  const sid  = document.getElementById('filterSchedule').value;
+  const cid  = document.getElementById('filterCompany').value;
+  const date = document.getElementById('filterDate').value;
+
+  filteredTrips = allTrips.filter(t => {
+    const text   = `${t.routeName} ${t.busName} ${t.driverName || ''}`.toLowerCase();
+    const schedOk = !sid  || String(t.tripScheduleId) === sid;
+    const compOk  = !cid  || String(t.busCompanyId)   === cid;
+    const dateOk  = !date || fmtDateOnly(t.departureTime) === date;
+    return (!q || text.includes(q)) && schedOk && compOk && dateOk;
+  });
+  currentPage = 1;
+  renderContent();
+  updateKPIs();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+
+function updateKPIs() {
+  let avail = 0, resv = 0;
+  // Only count trips that have seat data loaded
+  allTrips.forEach(t => {
+    (t.tripSeats || []).forEach(s => {
+      if (s.seatStatusId === 1) avail++;
+      else resv++;
+    });
+  });
+  document.getElementById('statTotal').textContent   = allTrips.length;
+  document.getElementById('statAvail').textContent   = avail;
+  document.getElementById('statResv').textContent    = resv;
+  document.getElementById('statShowing').textContent = filteredTrips.length;
+}
+
+// ── View toggle ───────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('gridView').style.display = v === 'grid' ? 'block' : 'none';
+  document.getElementById('listView').style.display = v === 'list' ? 'block' : 'none';
+  document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('btnList').classList.toggle('active', v === 'list');
+  renderContent();
+}
+
+function renderContent() {
+  currentView === 'grid' ? renderGrid() : renderTable();
+}
+
+// ── Format helpers ────────────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDateOnly(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function seatCounts(seats) {
+  const avail = (seats || []).filter(s => s.seatStatusId === 1).length;
+  const resv  = (seats || []).filter(s => s.seatStatusId !== 1).length;
+  return { avail, resv, total: avail + resv };
+}
+
+function statusInfo(tripStatusId, tripStatusName) {
+  if (!tripStatusName || tripStatusName.trim() === '') {
+    return { cls: 'unknown', label: 'Scheduled' };
+  }
+  const name = tripStatusName.toLowerCase();
+  if (name.includes('depart'))  return { cls: 'departed',  label: tripStatusName };
+  if (name.includes('arriv'))   return { cls: 'arrived',   label: tripStatusName };
+  if (name.includes('cancel'))  return { cls: 'cancelled', label: tripStatusName };
+  return { cls: 'scheduled', label: tripStatusName || 'Scheduled' };
+}
+
+// ── GRID RENDER — Boarding-pass cards ─────────────────
+function renderGrid() {
+  setLoading(false);
+  const grid  = document.getElementById('tripsGrid');
+  const empty = document.getElementById('gridEmpty');
+  const pag   = document.getElementById('gridPagination');
+
+  if (filteredTrips.length === 0) {
+    grid.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.style.display  = 'grid';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredTrips.slice(start, start + PAGE_SIZE);
+
+  grid.innerHTML = page.map((t, i) => {
+    const { avail, resv, total } = seatCounts(t.tripSeats);
+    const st   = statusInfo(t.tripStatusId, t.tripStatusName);
+    const dep  = fmtTime(t.departureTime);
+    const arr  = fmtTime(t.arrivalTime);
+    const date = fmtDateOnly(t.departureTime);
+
+    // Route split — extract FROM and TO if hyphen-separated
+    let fromCode = '---', toCode = '---', fromName = '', toName = '';
+    if (t.routeName) {
+      const parts = t.routeName.split(' - ');
+      fromName = parts[0] || t.routeName;
+      toName   = parts[1] || '';
+      fromCode = fromName.slice(0, 3).toUpperCase();
+      toCode   = toName.slice(0, 3).toUpperCase();
+    }
+
+    // Mini seat dots — max 24 shown for readability
+    const seats    = (t.tripSeats || []).slice(0, 24);
+    const seatDots = seats.map(s =>
+      `<span class="seat-dot ${s.seatStatusId === 1 ? 'avail' : 'resv'}" title="Seat ${s.busSeatName} — ${s.seatStatusName}"></span>`
+    ).join('');
+
+    return `
+    <div class="boarding-pass" style="animation-delay:${i * 30}ms">
+
+      <!-- Header -->
+      <div class="bp-header">
+        <span class="bp-id"><i class="fas fa-hashtag" style="font-size:9px"></i>${t.id}</span>
+        <span class="bp-status ${st.cls}">
+          <i class="fas fa-circle" style="font-size:7px"></i> ${st.label}
+        </span>
+      </div>
+
+      <!-- Route -->
+      <div class="bp-route">
+        <div class="bp-city">
+          <span class="bp-city-code">${fromCode}</span>
+          <span class="bp-city-name">${fromName}</span>
+        </div>
+        <div class="bp-flight-mid">
+          <div class="bp-flight-line">
+            <span class="bp-flight-dot"></span>
+            <span class="bp-flight-bar"></span>
+            <i class="fas fa-bus bp-flight-plane"></i>
+          </div>
+          <span style="font-size:10px;color:var(--text-mute);margin-top:2px">${date}</span>
+        </div>
+        <div class="bp-city" style="align-items:flex-end;text-align:right">
+          <span class="bp-city-code">${toCode}</span>
+          <span class="bp-city-name">${toName}</span>
+        </div>
+      </div>
+
+      <!-- Perforation -->
+      <div class="bp-tear">
+        <div class="bp-tear-circle"></div>
+        <div class="bp-tear-line"></div>
+        <div class="bp-tear-circle"></div>
+      </div>
+
+      <!-- Times -->
+      <div class="bp-times">
+        <div class="bp-time-block">
+          <span class="bp-time-label">Departs</span>
+          <span class="bp-time-val dep">${dep}</span>
+          <span class="bp-time-date">${date}</span>
+        </div>
+        <span class="bp-time-divider"><i class="fas fa-ellipsis-h"></i></span>
+        <div class="bp-time-block">
+          <span class="bp-time-label">Arrives</span>
+          <span class="bp-time-val arr">${arr}</span>
+          <span class="bp-time-date">${date}</span>
+        </div>
+      </div>
+
+      <!-- Seat map -->
+      <div class="bp-seats">
+        <div class="bp-seats-header">
+          <span class="bp-seats-label"><i class="fas fa-chair"></i> Seats</span>
+          <div class="bp-seats-counts">
+            ${(t.tripSeats && t.tripSeats.length > 0)
+              ? `<span class="seats-avail"><i class="fas fa-check-circle"></i> ${avail} free</span>
+                <span class="seats-resv"><i class="fas fa-lock"></i> ${resv} taken</span>`
+              : `<span style="font-size:11px;color:var(--text-mute);font-style:italic">Loading...</span>`
+            }
+          </div>
+        </div>
+        <div class="seat-mini-grid">
+          ${(t.tripSeats && t.tripSeats.length > 0)
+            ? seatDots + ((t.tripSeats.length > 24) ? `<span style="font-size:10px;color:var(--text-mute);align-self:center">+${t.tripSeats.length-24} more</span>` : '')
+            : `<span style="font-size:11px;color:var(--text-mute);font-style:italic;padding:4px 0"><i class="fas fa-eye" style="margin-right:4px"></i>Click to view full seat map</span>`
+          }
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="bp-footer">
+        <div class="bp-meta">
+          <span class="bp-bus-tag"><i class="fas fa-bus"></i> ${t.busName || '—'}</span>
+          ${t.driverName
+            ? `<span class="bp-driver-tag"><i class="fas fa-id-badge"></i> ${t.driverName}</span>`
+            : `<span class="bp-no-driver"><i class="fas fa-user-slash"></i> No driver</span>`}
+        </div>
+        <div class="action-btns">
+        <button class="action-btn view" onclick="window.location.href='/company/my-trips/${t.id}/?route=${encodeURIComponent(t.routeName || '')}'">
+          <i class="fas fa-eye"></i>
+        </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  renderPagination('grid');
+  fetchAllSeatCounts();
+
+}
+
+// ── TABLE RENDER ──────────────────────────────────────
+function renderTable() {
+  setLoading(false);
+  const wrap  = document.getElementById('tableWrap');
+  const empty = document.getElementById('listEmpty');
+  const pag   = document.getElementById('listPagination');
+
+  if (filteredTrips.length === 0) {
+    wrap.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.style.display  = 'block';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredTrips.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('tripBody').innerHTML = page.map((t, i) => {
+    const { avail, resv, total } = seatCounts(t.tripSeats);
+    const pct     = total > 0 ? Math.round((avail / total) * 100) : 0;
+    const dep     = fmtDateTime(t.departureTime);
+    const arr     = fmtDateTime(t.arrivalTime);
+    const st      = statusInfo(t.tripStatusId, t.tripStatusName);
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${t.id}</span></td>
+      <td><span class="route-tag-ti"><i class="fas fa-route"></i> ${t.routeName || '—'}</span></td>
+      <td><span class="time-badge-dep"><i class="fas fa-plane-departure"></i> ${dep}</span></td>
+      <td><span class="time-badge-arr"><i class="fas fa-plane-arrival"></i> ${arr}</span></td>
+      <td>
+        <div class="seat-bar-wrap">
+          <div class="seat-bar"><div class="seat-bar-fill" style="width:${pct}%"></div></div>
+          <span class="seat-bar-label">${avail}/${total} free</span>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span class="bp-bus-tag" style="display:inline-flex"><i class="fas fa-bus"></i> ${t.busName || '—'}</span>
+          ${t.driverName ? `<span class="bp-driver-tag" style="display:inline-flex"><i class="fas fa-id-badge"></i> ${t.driverName}</span>` : `<span style="font-size:11px;color:var(--text-mute);font-style:italic">No driver</span>`}
+        </div>
+      </td>
+      <td>
+        <div class="action-btns">
+        <button class="action-btn view" onclick="window.location.href='/company/my-trips/${t.id}/?route=${encodeURIComponent(t.routeName || '')}'">
+          <i class="fas fa-eye"></i>
+        </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination('list');
+  fetchAllSeatCounts();
+}
+
+function renderPagination(view) {
+  const total   = Math.ceil(filteredTrips.length / PAGE_SIZE);
+  const pagEl   = document.getElementById(view === 'grid' ? 'gridPagination' : 'listPagination');
+  const prevBtn = document.getElementById(view === 'grid' ? 'gridPrevBtn'   : 'listPrevBtn');
+  const nextBtn = document.getElementById(view === 'grid' ? 'gridNextBtn'   : 'listNextBtn');
+  const info    = document.getElementById(view === 'grid' ? 'gridPageInfo'  : 'listPageInfo');
+  pagEl.style.display = total > 1 ? 'flex' : 'none';
+  info.textContent    = `Page ${currentPage} of ${total}`;
+  prevBtn.disabled    = currentPage === 1;
+  nextBtn.disabled    = currentPage === total;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredTrips.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderContent();
+}
+
+function setLoading(on) {
+  document.getElementById('gridLoading').style.display  = on ? 'flex' : 'none';
+  document.getElementById('tableLoading').style.display = on ? 'flex' : 'none';
+  if (on) {
+    document.getElementById('tripsGrid').style.display  = 'none';
+    document.getElementById('gridEmpty').style.display  = 'none';
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('listEmpty').style.display  = 'none';
+  }
+}
+
+// ── VIEW MODAL ────────────────────────────────────────
+async function openViewModal(tripId) {
+  document.getElementById('viewModal').style.display = 'flex';
+  document.getElementById('vmTitle').textContent     = 'Loading...';
+  document.getElementById('vmSub').textContent       = `Trip #${tripId}`;
+  document.getElementById('vmContent').innerHTML     =
+    '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+
+  try {
+    const res  = await fetch(`/api/trip-instances/${tripId}/`);
+    const data = await res.json();
+    const t    = data.result || data;
+
+    const { avail, resv, total } = seatCounts(t.tripSeats);
+    const st  = statusInfo(t.tripStatusId, t.tripStatusName);
+    const dep = fmtDateTime(t.departureTime);
+    const arr = fmtDateTime(t.arrivalTime);
+
+    document.getElementById('vmTitle').textContent = t.routeName || `Trip #${t.id}`;
+    document.getElementById('vmSub').textContent   = `Trip #${t.id} · ${st.label}`;
+
+    // Full seat grid
+    const seatHTML = (t.tripSeats || []).map(s => `
+      <div class="seat-full ${s.seatStatusId === 1 ? 'avail' : 'resv'}" title="${s.seatStatusName}${s.reservedByUserId ? ' — ' + (s.passengerName || 'Reserved') : ''}">
+        <i class="fas fa-chair"></i>
+        <span>${s.busSeatName}</span>
+      </div>`).join('');
+
+    document.getElementById('vmContent').innerHTML = `
+      <!-- Trip header -->
+      <div class="modal-trip-header">
+        <div class="mth-route">${t.routeName || '—'}</div>
+        <div class="mth-times">
+          <div class="mth-time">
+            <span class="mth-t-label"><i class="fas fa-plane-departure"></i> Departure</span>
+            <span class="mth-t-val">${dep}</span>
+          </div>
+          <span class="mth-sep">→</span>
+          <div class="mth-time">
+            <span class="mth-t-label" style="color:#34d399"><i class="fas fa-plane-arrival"></i> Arrival</span>
+            <span class="mth-t-val" style="color:#34d399">${arr}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info rows -->
+      <div class="info-rows" style="margin-bottom:1.2rem">
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-hashtag"></i> Trip ID</span>
+          <span class="info-value"><span class="id-badge">#${t.id}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-info-circle"></i> Status</span>
+          <span class="info-value"><span class="bp-status ${st.cls}"><i class="fas fa-circle" style="font-size:7px"></i> ${st.label}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-bus"></i> Bus</span>
+          <span class="info-value">${t.busName || '—'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-id-badge"></i> Driver</span>
+          <span class="info-value">${t.driverName || '<span style="opacity:.5;font-style:italic">Not assigned</span>'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-chair"></i> Seats</span>
+          <span class="info-value">
+            <span style="color:#34d399;font-weight:700">${avail} free</span>
+            <span style="color:var(--text-mute);margin:0 4px">/</span>
+            <span style="color:var(--ti);font-weight:700">${resv} taken</span>
+            <span style="color:var(--text-mute)"> of ${total}</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Seat map -->
+      <div style="margin-bottom:.6rem">
+        <div class="seat-legend">
+          <div class="legend-item"><span class="legend-dot avail"></span> Available</div>
+          <div class="legend-item"><span class="legend-dot resv"></span> Reserved</div>
+        </div>
+        <div class="seat-full-grid">${seatHTML}</div>
+      </div>
+
+      <!-- Reserved seats detail (if any) -->
+      ${resv > 0 ? `
+      <div style="margin-top:.4rem">
+        <div style="font-size:11px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">
+          <i class="fas fa-lock"></i> Reserved Seats Detail
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${(t.tripSeats || []).filter(s => s.seatStatusId !== 1).map(s => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:10px;background:var(--ti-dim);border:1px solid var(--ti-border)">
+              <span style="color:var(--ti);font-weight:700;font-size:12px"><i class="fas fa-chair"></i> Seat ${s.busSeatName}</span>
+              <span style="color:var(--text-mute);font-size:11px">${s.seatStatusName}${s.reservedUntil ? ' · until ' + new Date(s.reservedUntil).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+    `;
+  } catch (err) {
+    document.getElementById('vmContent').innerHTML =
+      `<p style="color:#f87171;padding:1rem;text-align:center">Failed to load trip details.</p>`;
+  }
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

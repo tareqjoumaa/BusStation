@@ -1,0 +1,661 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Offices — Bus Station{% endblock %}
+{% block breadcrumb %}Offices{% endblock %}
+{% block page_title %}Office Management{% endblock %}
+{% block nav_offices %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/offices.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="officeSearch" placeholder="Search by name, company, city..." />
+    </div>
+    <select class="filter-select" id="filterCompany">
+      <option value="">All Companies</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadOffices()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+      <i class="fas fa-plus"></i> Add Office
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- Stats bar -->
+<div class="office-stats-bar" id="statsBar" style="display:none">
+  <div class="osb-item">
+    <i class="fas fa-building"></i>
+    <span class="osb-val" id="statTotal">0</span>
+    <span class="osb-label">Total Offices</span>
+  </div>
+  <div class="osb-divider"></div>
+  <div class="osb-item">
+    <i class="fas fa-industry"></i>
+    <span class="osb-val" id="statCompanies">0</span>
+    <span class="osb-label">Companies</span>
+  </div>
+  <div class="osb-divider"></div>
+  <div class="osb-item">
+    <i class="fas fa-filter"></i>
+    <span class="osb-val" id="statShowing">0</span>
+    <span class="osb-label">Showing</span>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="cards-loading" id="cardsLoading">
+  <div class="loading-spinner"></div>
+  <span>Loading offices from API...</span>
+</div>
+
+<!-- Cards Grid -->
+<div class="cards-grid" id="officesGrid" style="display:none"></div>
+
+<!-- Empty state -->
+<div class="empty-state" id="emptyState" style="display:none">
+  <div class="empty-icon"><i class="fas fa-building"></i></div>
+  <h3 class="empty-title">No offices found</h3>
+  <p class="empty-desc">Try adjusting your search or add a new office.</p>
+  <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> Add Office</button>
+</div>
+
+
+<!-- ── CREATE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus-circle"></i></div>
+      <div>
+        <h3 class="modal-title">Add New Office</h3>
+        <p class="modal-subtitle">Register a new bus company office</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i>
+      <span id="createErrorMsg"></span>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-tag"></i> Office Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createName" placeholder="e.g. BCO-Damascus" />
+        <span class="form-field-error" id="createNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-map-marker-alt"></i> Address <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createAddress" placeholder="e.g. Al-Hamra Street, Damascus" />
+        <span class="form-field-error" id="createAddressErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-city"></i> City ID <span class="req">*</span></label>
+        <select class="form-input" id="createCityId">
+          <option value="">Select City</option>
+        </select>
+        <span class="form-field-error" id="createCityErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-industry"></i> Bus Company ID <span class="req">*</span></label>
+        <select class="form-input" id="createCompanyId">
+          <option value="">Select Company</option>
+        </select>
+        <span class="form-field-error" id="createCompanyErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createSubmitBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create Office</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── EDIT MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Office</h3>
+        <p class="modal-subtitle" id="editModalSubtitle">Update office details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i>
+      <span id="editErrorMsg"></span>
+    </div>
+
+    <div class="modal-body">
+      <input type="hidden" id="editOfficeId" />
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-tag"></i> Office Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editName" placeholder="e.g. BCO-Damascus" />
+        <span class="form-field-error" id="editNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-map-marker-alt"></i> Address <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editAddress" placeholder="e.g. Al-Hamra Street" />
+        <span class="form-field-error" id="editAddressErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-city"></i> City ID <span class="req">*</span></label>
+        <input type="number" class="form-input" id="editCityId" placeholder="City ID" min="1" />
+        <span class="form-field-error" id="editCityErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-industry"></i> Bus Company ID <span class="req">*</span></label>
+        <input type="number" class="form-input" id="editCompanyId" placeholder="Company ID" min="1" />
+        <span class="form-field-error" id="editCompanyErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editSubmitBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── DELETE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-trash-alt"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Office?</h3>
+        <p class="modal-subtitle" id="deleteModalSubtitle">This action cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" style="padding:1rem 1.6rem">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete office <strong id="deleteOfficeName">—</strong>.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="confirmDeleteBtn" onclick="executeDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete Office</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── VIEW MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-building"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewOfficeName">Office Details</h3>
+        <p class="modal-subtitle" id="viewOfficeSubtitle">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="viewDetailGrid"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-primary" id="viewEditBtn" onclick="openEditFromView()">
+        <i class="fas fa-pen"></i> Edit
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allOffices      = [];
+let filteredOffices = [];
+let pendingDeleteId   = null;
+let pendingDeleteName = '';
+let viewingOffice     = null;
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadOffices();
+  document.getElementById('officeSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterCompany').addEventListener('change', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load all offices ──────────────────────────────────
+async function loadOffices() {
+  setLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+
+  try {
+    const res  = await fetch('/api/offices/');
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+    allOffices = Array.isArray(data) ? data
+               : Array.isArray(data.result) ? data.result
+               : [];
+
+    // Populate company filter
+    const companies = new Map();
+    allOffices.forEach(o => {
+      if (o.busCompanyId) companies.set(o.busCompanyId, o.busCompanyName || `Company #${o.busCompanyId}`);
+    });
+    const sel = document.getElementById('filterCompany');
+    sel.innerHTML = '<option value="">All Companies</option>';
+    companies.forEach((name, id) => {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+
+    applyFilters();
+    document.getElementById('statsBar').style.display = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+
+  } catch (err) {
+    document.getElementById('apiBanner').style.display = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load offices: ' + err.message;
+    setLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Filter ────────────────────────────────────────────
+function applyFilters() {
+  const q   = document.getElementById('officeSearch').value.toLowerCase().trim();
+  const cid = document.getElementById('filterCompany').value;
+
+  filteredOffices = allOffices.filter(o => {
+    const text = `${o.name} ${o.busCompanyName} ${o.cityName} ${o.address}`.toLowerCase();
+    return (!q || text.includes(q))
+        && (!cid || String(o.busCompanyId) === cid);
+  });
+
+  renderCards();
+  updateStats();
+}
+
+// ── Render cards ──────────────────────────────────────
+function renderCards() {
+  setLoading(false);
+  const grid = document.getElementById('officesGrid');
+
+  if (filteredOffices.length === 0) {
+    grid.style.display = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    return;
+  }
+
+  grid.style.display = 'grid';
+  document.getElementById('emptyState').style.display = 'none';
+
+  grid.innerHTML = filteredOffices.map((office, i) => {
+    const name    = office.name || '—';
+    const company = office.busCompanyName || '—';
+    const city    = office.cityName || '—';
+    const address = office.address || '—';
+    const initial = name.charAt(0).toUpperCase();
+    const date    = office.createdOn
+      ? new Date(office.createdOn).toLocaleDateString('en-GB')
+      : '—';
+
+    return `
+    <div class="office-card anim-row" style="--row-delay:${i * 60}ms">
+
+      <div class="office-card-header">
+        <div class="office-avatar">${initial}</div>
+        <div class="office-identity">
+          <span class="office-name">${name}</span>
+          <span class="office-company"><i class="fas fa-industry"></i> ${company}</span>
+        </div>
+        <div class="office-status-dot active"></div>
+      </div>
+
+      <div class="office-info-rows">
+        <div class="oir">
+          <i class="fas fa-map-marker-alt"></i>
+          <span>${address}</span>
+        </div>
+        <div class="oir">
+          <i class="fas fa-city"></i>
+          <span>${city || `City ID: ${office.cityId || '—'}`}</span>
+        </div>
+        <div class="oir">
+          <i class="fas fa-calendar-alt"></i>
+          <span>Added ${date}</span>
+        </div>
+      </div>
+
+      <div class="office-id-badge">
+        <span class="id-badge">#${office.id}</span>
+        <span class="company-id-tag">Co. #${office.busCompanyId}</span>
+      </div>
+
+      <div class="office-card-actions">
+        <button class="action-btn view" title="View details"
+          onclick='openViewModal(${JSON.stringify(office).replace(/'/g,"&#39;")})'>
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="action-btn edit" title="Edit"
+          onclick='openEditModal(${JSON.stringify(office).replace(/'/g,"&#39;")})'>
+          <i class="fas fa-pen"></i>
+        </button>
+        <button class="action-btn delete" title="Delete"
+          onclick="confirmDelete(${office.id}, '${name.replace(/'/g, "\\'")}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+
+    </div>`;
+  }).join('');
+}
+
+// ── Stats ─────────────────────────────────────────────
+function updateStats() {
+  const companies = new Set(allOffices.map(o => o.busCompanyId)).size;
+  document.getElementById('statTotal').textContent    = allOffices.length;
+  document.getElementById('statCompanies').textContent = companies;
+  document.getElementById('statShowing').textContent  = filteredOffices.length;
+}
+
+// ── View modal ────────────────────────────────────────
+function openViewModal(office) {
+  viewingOffice = office;
+  document.getElementById('viewOfficeName').textContent    = office.name || '—';
+  document.getElementById('viewOfficeSubtitle').textContent = `ID #${office.id} · ${office.busCompanyName || '—'}`;
+  document.getElementById('viewModal').style.display = 'flex';
+
+  const date = office.createdOn ? new Date(office.createdOn).toLocaleString('en-GB') : '—';
+  document.getElementById('viewDetailGrid').innerHTML = `
+    <div class="di-row"><span class="di-label">Office ID</span><span class="di-value"><span class="id-badge">#${office.id}</span></span></div>
+    <div class="di-row"><span class="di-label">Office Name</span><span class="di-value" style="font-weight:700">${office.name || '—'}</span></div>
+    <div class="di-row"><span class="di-label">Company</span><span class="di-value">${office.busCompanyName || '—'}</span></div>
+    <div class="di-row"><span class="di-label">Company ID</span><span class="di-value">${office.busCompanyId || '—'}</span></div>
+    <div class="di-row"><span class="di-label">City</span><span class="di-value">${office.cityName || `ID: ${office.cityId}`}</span></div>
+    <div class="di-row"><span class="di-label">Address</span><span class="di-value">${office.address || '—'}</span></div>
+    <div class="di-row"><span class="di-label">Created On</span><span class="di-value" style="color:var(--text-mute);font-size:12px">${date}</span></div>
+  `;
+}
+
+function openEditFromView() {
+  closeModal('viewModal');
+  if (viewingOffice) openEditModal(viewingOffice);
+}
+
+// ── Create modal ──────────────────────────────────────
+function openCreateModal() {
+  ['createName','createAddress','createCityId','createCompanyId']
+    .forEach(id => document.getElementById(id).value = '');
+
+  ['createNameErr','createAddressErr','createCityErr','createCompanyErr']
+    .forEach(id => document.getElementById(id).textContent = '');
+
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+
+  loadCities();
+  loadCompanies();
+
+  setTimeout(() => document.getElementById('createName').focus(), 100);
+}
+
+async function loadCompanies() {
+  try {
+    const res = await fetch('/api/companies/');
+    const data = await res.json();
+
+    const companies = data.result || [];
+    const select = document.getElementById('createCompanyId');
+
+    select.innerHTML = '<option value="">Select Company</option>';
+
+    companies.forEach(company => {
+      const option = document.createElement('option');
+      option.value = company.id;
+      option.textContent = `${company.name}`;
+      select.appendChild(option);
+    });
+
+  } catch (err) {
+    console.error("Failed to load companies", err);
+  }
+}
+
+async function loadCities() {
+  try {
+    const res = await fetch('/api/cities/');
+    const data = await res.json();
+
+    const cities = data.result || [];
+    const select = document.getElementById('createCityId');
+
+    select.innerHTML = '<option value="">Select City</option>';
+
+    cities.forEach(city => {
+      const option = document.createElement('option');
+      option.value = city.id;
+      option.textContent = `${city.name} (${city.governorateName})`;
+      select.appendChild(option);
+    });
+
+  } catch (err) {
+    console.error("Failed to load cities", err);
+  }
+}
+
+async function submitCreate() {
+  const name      = document.getElementById('createName').value.trim();
+  const address   = document.getElementById('createAddress').value.trim();
+  const cityId    = document.getElementById('createCityId').value;
+  const companyId = document.getElementById('createCompanyId').value;
+
+  let valid = true;
+  const check = (val, errId, msg) => { if (!val) { document.getElementById(errId).textContent = msg; valid = false; } else document.getElementById(errId).textContent = ''; };
+  check(name,      'createNameErr',    'Office name is required');
+  check(address,   'createAddressErr', 'Address is required');
+  check(cityId,    'createCityErr',    'City ID is required');
+  check(companyId, 'createCompanyErr', 'Company ID is required');
+  if (!valid) return;
+
+  setBtnLoading('createSubmitBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/offices/create/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        name,
+        address,
+        cityId:    parseInt(cityId),
+        busCompanyId: parseInt(companyId),
+      }),
+    });
+    const data = await res.json();
+
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast(`Office "${name}" created successfully`, 'success');
+      loadOffices();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create office.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createSubmitBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────
+function openEditModal(office) {
+  document.getElementById('editOfficeId').value  = office.id;
+  document.getElementById('editName').value      = office.name || '';
+  document.getElementById('editAddress').value   = office.address || '';
+  document.getElementById('editCityId').value    = office.cityId || '';
+  document.getElementById('editCompanyId').value = office.busCompanyId || '';
+  ['editNameErr','editAddressErr','editCityErr','editCompanyErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('editModalSubtitle').textContent = `Editing: ${office.name}`;
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('editName').focus(), 100);
+}
+
+async function submitEdit() {
+  const id        = document.getElementById('editOfficeId').value;
+  const name      = document.getElementById('editName').value.trim();
+  const address   = document.getElementById('editAddress').value.trim();
+  const cityId    = document.getElementById('editCityId').value;
+  const companyId = document.getElementById('editCompanyId').value;
+
+  let valid = true;
+  const check = (val, errId, msg) => { if (!val) { document.getElementById(errId).textContent = msg; valid = false; } else document.getElementById(errId).textContent = ''; };
+  check(name,      'editNameErr',    'Office name is required');
+  check(address,   'editAddressErr', 'Address is required');
+  check(cityId,    'editCityErr',    'City ID is required');
+  check(companyId, 'editCompanyErr', 'Company ID is required');
+  if (!valid) return;
+
+  setBtnLoading('editSubmitBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/offices/update/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        id:           parseInt(id),
+        name,
+        address,
+        cityId:       parseInt(cityId),
+        busCompanyId: parseInt(companyId),
+      }),
+    });
+    const data = await res.json();
+
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast(`Office "${name}" updated successfully`, 'success');
+      loadOffices();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update office.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editSubmitBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── Delete ────────────────────────────────────────────
+function confirmDelete(id, name) {
+  pendingDeleteId   = id;
+  pendingDeleteName = name;
+  document.getElementById('deleteOfficeName').textContent      = name || `Office #${id}`;
+  document.getElementById('deleteModalSubtitle').textContent   = `Office #${id} · ${name}`;
+  document.getElementById('deleteModal').style.display = 'flex';
+}
+
+async function executeDelete() {
+  if (!pendingDeleteId) return;
+  setBtnLoading('confirmDeleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+
+  try {
+    const res  = await fetch(`/api/offices/${pendingDeleteId}/delete/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast(`Office "${pendingDeleteName}" deleted`, 'error');
+      allOffices      = allOffices.filter(o => o.id !== pendingDeleteId);
+      filteredOffices = filteredOffices.filter(o => o.id !== pendingDeleteId);
+      renderCards();
+      updateStats();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete.';
+      showToast(msg, 'error');
+      closeModal('deleteModal');
+    }
+  } catch (err) {
+    showToast('Network error. Please try again.', 'error');
+    closeModal('deleteModal');
+  } finally {
+    setBtnLoading('confirmDeleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+    pendingDeleteId = null; pendingDeleteName = '';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setLoading(loading) {
+  document.getElementById('cardsLoading').style.display  = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('officesGrid').style.display = 'none';
+    document.getElementById('emptyState').style.display  = 'none';
+  }
+}
+
+function setBtnLoading(btnId, labelId, loadingId, loading) {
+  document.getElementById(btnId).disabled                     = loading;
+  document.getElementById(labelId).style.display   = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadingId).style.display = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

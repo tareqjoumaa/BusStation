@@ -1,0 +1,926 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Bookings — Bus Station{% endblock %}
+{% block breadcrumb %}Bookings{% endblock %}
+{% block page_title %}Bookings{% endblock %}
+{% block nav_bookings %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="bkSearch" placeholder="Search by code, user, trip..." />
+    </div>
+    <select class="filter-select" id="filterStatus">
+      <option value="">All Statuses</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="reserved">Reserved</option>
+      <option value="cancelled">Cancelled</option>
+      <option value="pending">Pending</option>
+    </select>
+    <select class="filter-select" id="filterChecked">
+      <option value="">All</option>
+      <option value="yes">Checked In</option>
+      <option value="no">Not Checked</option>
+    </select>
+    <select class="filter-select" id="filterDate">
+      <option value="">All Dates</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-plus"></i> New Booking
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPIs -->
+<div class="bk-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-ticket-alt"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Bookings</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-line"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#34d399">
+    <div class="kpi-icon"><i class="fas fa-check-double"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statConfirmed">0</span>
+      <span class="kpi-label">Confirmed</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-check-circle"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#f43f5e">
+    <div class="kpi-icon"><i class="fas fa-times-circle"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statCancelled">0</span>
+      <span class="kpi-label">Cancelled</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-ban"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#f59e0b">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-card">
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading bookings...</span>
+  </div>
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:60px">ID</th>
+          <th>User</th>
+          <th>Trip / Departure</th>
+          <th>Status</th>
+          <th>Price</th>
+          <th>Checked</th>
+          <th>Created</th>
+          <th style="width:120px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="bkBody"></tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-ticket-alt"></i></div>
+    <h3 class="empty-title">No bookings found</h3>
+    <p class="empty-desc">Try adjusting your filters or create a new booking.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Booking</button>
+  </div>
+  <div class="pagination" id="paginationWrap" style="display:none">
+    <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     VIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-ticket-alt"></i></div>
+      <div>
+        <h3 class="modal-title" id="vmTitle">Booking Details</h3>
+        <p class="modal-subtitle" id="vmSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="vmContent">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-warn" id="vmEditBtn"><i class="fas fa-pen"></i> Edit</button>
+      <button class="btn-danger" id="vmCancelBtn"><i class="fas fa-ban"></i> Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     CREATE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Booking</h3>
+        <p class="modal-subtitle">Select a trip and add passenger seats</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-bus"></i> Trip Instance <span class="req">*</span></label>
+          <select class="form-input" id="cTripId" onchange="loadTripSeats()">
+            <option value="">Select trip...</option>
+          </select>
+          <span class="form-field-error" id="cTripErr"></span>
+        </div>
+
+        <!-- Available seats dropdown — populated after trip selected -->
+        <div class="form-field" id="cSeatFieldWrap" style="display:none">
+          <label class="form-label"><i class="fas fa-chair"></i> Available Seats</label>
+          <select class="form-input" id="cSeatPicker">
+            <option value="">Pick a seat to add...</option>
+          </select>
+          <button type="button" class="add-seat-btn" style="margin-top:8px" onclick="addSeatRow()">
+            <i class="fas fa-plus"></i> Add Passenger
+          </button>
+        </div>
+
+        <!-- Dynamic seat rows -->
+        <div class="seat-rows" id="cSeatRows"></div>
+
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create Booking</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     EDIT MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Booking</h3>
+        <p class="modal-subtitle" id="editModalSub">Update status and passengers</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editBookingId" />
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-info-circle"></i> Status <span class="req">*</span></label>
+          <select class="form-input" id="eStatusId">
+            <option value="">Select status...</option>
+            <option value="1">Reserved</option>
+            <option value="2">Confirmed</option>
+            <option value="3">Cancelled</option>
+          </select>
+          <span class="form-field-error" id="eStatusErr"></span>
+        </div>
+
+        <!-- Existing seat rows from booking -->
+        <div id="eSeatsSection">
+          <div style="font-size:11px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">
+            <i class="fas fa-users"></i> Passengers
+          </div>
+          <div class="seat-rows" id="eSeatRows"></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     CANCEL MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="cancelModal" style="display:none">
+  <div class="modal-box narrow">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-ban"></i></div>
+      <div>
+        <h3 class="modal-title">Cancel Booking?</h3>
+        <p class="modal-subtitle" id="cancelModalSub">This cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('cancelModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="cancel-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to cancel booking <strong id="cancelLabel">—</strong>. The seats will be released.</p>
+      </div>
+      <div class="modal-error" id="cancelError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="cancelErrorMsg"></span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('cancelModal')">Keep Booking</button>
+      <button class="btn-danger" id="cancelBtn" onclick="submitCancel()">
+        <span id="cancelBtnLabel"><i class="fas fa-ban"></i> Yes, Cancel</span>
+        <span id="cancelBtnLoading" style="display:none"><span class="btn-spinner"></span> Cancelling...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allBookings      = [];
+let allTrips         = [];          // trip instances for create dropdown
+let filteredBookings = [];
+let currentPage      = 1;
+const PAGE_SIZE      = 20;
+let pendingCancelId  = null;
+let availableSeats   = [];          // seats for selected trip in create modal
+let seatRowCount     = 0;
+
+// ── Toast ─────────────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = (msg, type) => {
+    const e = document.getElementById('_bkToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_bkToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#10b981';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);`;
+    const ic = type === 'success' ? 'check-circle' : 'info-circle';
+    t.innerHTML = `<i class="fas fa-${ic}"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF')) {
+      const s = document.createElement('style'); s.id = '_tKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  document.getElementById('bkSearch').addEventListener('input', applyFilters);
+  ['filterStatus','filterChecked','filterDate'].forEach(id =>
+    document.getElementById(id).addEventListener('change', applyFilters)
+  );
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape')
+      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load all ──────────────────────────────────────────
+async function loadAll() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const [bkRes, tripsRes] = await Promise.all([
+      fetch('/api/bookings/'),
+      fetch('/api/bookings/trips/'),
+    ]);
+    const bkData    = await bkRes.json();
+    const tripsData = await tripsRes.json();
+
+    if (!bkRes.ok) throw new Error(bkData.error || 'HTTP ' + bkRes.status);
+
+    allBookings = Array.isArray(bkData.result)    ? bkData.result    : Array.isArray(bkData)    ? bkData    : [];
+    allTrips    = Array.isArray(tripsData.result) ? tripsData.result : Array.isArray(tripsData) ? tripsData : [];
+
+    // Sort newest first by id
+    allBookings.sort((a, b) => b.id - a.id);
+
+    buildDateFilter();
+    populateTripDropdown();
+    applyFilters();
+
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load bookings: ' + err.message;
+    setTableLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+function buildDateFilter() {
+  const dates = [...new Set(allBookings.map(b => fmtDateOnly(b.departureTime)).filter(Boolean))].sort();
+  const sel   = document.getElementById('filterDate');
+  sel.innerHTML = '<option value="">All Dates</option>';
+  dates.forEach(d => {
+    const o = document.createElement('option'); o.value = d; o.textContent = d;
+    sel.appendChild(o);
+  });
+}
+
+function populateTripDropdown() {
+  const sel = document.getElementById('cTripId');
+  sel.innerHTML = '<option value="">Select trip...</option>';
+  allTrips.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.id;
+    const dep = t.departureTime ? new Date(t.departureTime).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '';
+    o.textContent = `#${t.id} — ${t.routeName || 'Trip'} · ${dep}`;
+    sel.appendChild(o);
+  });
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q       = document.getElementById('bkSearch').value.toLowerCase().trim();
+  const status  = document.getElementById('filterStatus').value.toLowerCase();
+  const checked = document.getElementById('filterChecked').value;
+  const date    = document.getElementById('filterDate').value;
+
+  filteredBookings = allBookings.filter(b => {
+    const text = `${b.userName || ''} #${b.tripInstanceId}`.toLowerCase();
+    const statusOk  = !status  || (b.statusName || '').toLowerCase().includes(status);
+    const checkedOk = !checked || (checked === 'yes' ? b.checked : !b.checked);
+    const dateOk    = !date    || fmtDateOnly(b.departureTime) === date;
+    return (!q || text.includes(q)) && statusOk && checkedOk && dateOk;
+  });
+  currentPage = 1;
+  renderTable();
+  updateKPIs();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const confirmed = allBookings.filter(b => (b.statusName || '').toLowerCase().includes('confirm')).length;
+  const cancelled = allBookings.filter(b => (b.statusName || '').toLowerCase().includes('cancel')).length;
+  document.getElementById('statTotal').textContent     = allBookings.length;
+  document.getElementById('statConfirmed').textContent = confirmed;
+  document.getElementById('statCancelled').textContent = cancelled;
+  document.getElementById('statShowing').textContent   = filteredBookings.length;
+}
+
+// ── Helpers ───────────────────────────────────────────
+function fmtDateOnly(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function statusInfo(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('confirm')) return { cls:'confirmed',  label: name || 'Confirmed',  icon:'check-double' };
+  if (n.includes('cancel'))  return { cls:'cancelled',  label: name || 'Cancelled',  icon:'ban' };
+  if (n.includes('reserv'))  return { cls:'reserved',   label: name || 'Reserved',   icon:'lock' };
+  if (n.includes('pending')) return { cls:'pending',    label: name || 'Pending',    icon:'clock' };
+  return { cls:'unknown', label: name || 'Unknown', icon:'question-circle' };
+}
+
+// ── Render table ──────────────────────────────────────
+function renderTable() {
+  setTableLoading(false);
+  if (filteredBookings.length === 0) {
+    document.getElementById('tableWrap').style.display      = 'none';
+    document.getElementById('emptyState').style.display     = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredBookings.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('bkBody').innerHTML = page.map((b, i) => {
+    const st      = statusInfo(b.statusName);
+    const created = fmtDateTime(b.createdOn);
+    const dep     = fmtDateTime(b.departureTime);
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 15}ms">
+      <td><span class="id-badge">#${b.id}</span></td>
+      <td><span class="user-tag" title="${b.userName || ''}"><i class="fas fa-user"></i> ${b.userName || '—'}</span></td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <span class="trip-tag"><i class="fas fa-bus"></i> Trip #${b.tripInstanceId}</span>
+          <span style="font-size:11px;color:var(--text-mute)">${dep}</span>
+        </div>
+      </td>
+      <td><span class="status-badge ${st.cls}"><i class="fas fa-${st.icon}"></i> ${st.label}</span></td>
+      <td><span class="price-tag">${b.totalPrice ?? 0} <small>SYP</small></span></td>
+      <td>
+        ${b.checked
+          ? `<span class="check-yes"><i class="fas fa-check-circle"></i> Yes</span>`
+          : `<span class="check-no"><i class="fas fa-circle"></i> No</span>`}
+      </td>
+      <td><span class="date-text">${created}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${b.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModal(${b.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn cancel" title="Cancel" onclick="openCancelModal(${b.id},'${(b.code||'#'+b.id).replace(/'/g,"\\'")}')"><i class="fas fa-ban"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalPages = Math.ceil(filteredBookings.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent         = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled             = currentPage === 1;
+  document.getElementById('nextBtn').disabled             = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredBookings.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+function setTableLoading(on) {
+  document.getElementById('tableLoading').style.display = on ? 'flex' : 'none';
+  if (on) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
+
+// ── VIEW MODAL ────────────────────────────────────────
+async function openViewModal(bookingId) {
+  document.getElementById('viewModal').style.display = 'flex';
+  document.getElementById('vmTitle').textContent     = 'Loading...';
+  document.getElementById('vmSub').textContent       = `Booking #${bookingId}`;
+  document.getElementById('vmContent').innerHTML     =
+    '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+
+  try {
+    const res  = await fetch(`/api/bookings/${bookingId}/`);
+    const data = await res.json();
+    const b    = data.result || data;
+    const st   = statusInfo(b.statusName);
+
+    document.getElementById('vmTitle').textContent = `Booking ${b.code ? '#' + b.code : '#' + b.id}`;
+    document.getElementById('vmSub').textContent   = `#${b.id} · ${st.label}`;
+
+    // Wire edit / cancel buttons
+    document.getElementById('vmEditBtn').onclick   = () => { closeModal('viewModal'); openEditModal(b.id, b); };
+    document.getElementById('vmCancelBtn').onclick = () => { closeModal('viewModal'); openCancelModal(b.id, b.code || '#' + b.id); };
+
+    const dep = fmtDateTime(b.departureTime);
+    const arr = fmtDateTime(b.arrivalTime);
+    const created = fmtDateTime(b.createdOn);
+
+    const passengersHTML = (b.seats || []).length > 0
+      ? (b.seats || []).map(s => `
+          <div class="passenger-card">
+            <div class="passenger-seat">
+              <i class="fas fa-chair"></i>
+              <span>${s.seatNumber}</span>
+            </div>
+            <div class="passenger-info">
+              <span class="passenger-name">${s.passengerName || '—'}</span>
+              <span class="passenger-phone"><i class="fas fa-phone" style="font-size:10px;margin-right:3px"></i>${s.passengerPhoneNumber || '—'}</span>
+            </div>
+          </div>`).join('')
+      : `<p style="color:var(--text-mute);font-size:13px;font-style:italic;text-align:center;padding:1rem 0">No passenger details available.</p>`;
+
+    document.getElementById('vmContent').innerHTML = `
+      <!-- Ticket header -->
+      <div class="booking-ticket">
+        <div class="bt-top">
+          <div class="bt-code-wrap">
+            <span class="bt-code-label"><i class="fas fa-qrcode"></i> Booking Code</span>
+            <span class="bt-code-val">${b.code || '—'}</span>
+          </div>
+          <div class="bt-trip">
+            <span class="bt-trip-route"><i class="fas fa-bus"></i> Trip #${b.tripInstanceId}</span>
+            <span class="bt-trip-time">${dep} → ${arr}</span>
+          </div>
+        </div>
+        <div class="bt-bottom">
+          <div class="bt-stat">
+            <span class="bt-stat-label">Status</span>
+            <span class="bt-stat-val"><span class="status-badge ${st.cls}" style="font-size:12px"><i class="fas fa-${st.icon}"></i> ${st.label}</span></span>
+          </div>
+          <div class="bt-divider"></div>
+          <div class="bt-stat">
+            <span class="bt-stat-label">Price</span>
+            <span class="bt-stat-val">${b.totalPrice ?? 0} SYP</span>
+          </div>
+          <div class="bt-divider"></div>
+          <div class="bt-stat">
+            <span class="bt-stat-label">Checked</span>
+            <span class="bt-stat-val">${b.checked ? '<span class="check-yes"><i class="fas fa-check-circle"></i> Yes</span>' : '<span class="check-no">No</span>'}</span>
+          </div>
+          <div class="bt-divider"></div>
+          <div class="bt-stat">
+            <span class="bt-stat-label">Seats</span>
+            <span class="bt-stat-val">${(b.seats || []).length}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info rows -->
+      <div class="info-rows" style="margin-bottom:1.2rem">
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-user"></i> User</span>
+          <span class="info-value" style="font-size:12px">${b.userName || '—'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-calendar-alt"></i> Created</span>
+          <span class="info-value">${created}</span>
+        </div>
+        ${b.checkedOn ? `
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-check-double"></i> Checked On</span>
+          <span class="info-value">${fmtDateTime(b.checkedOn)}</span>
+        </div>` : ''}
+      </div>
+
+      <!-- Passengers -->
+      <div style="font-size:11px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">
+        <i class="fas fa-users"></i> Passengers (${(b.seats||[]).length})
+      </div>
+      ${passengersHTML}
+    `;
+  } catch (err) {
+    document.getElementById('vmContent').innerHTML =
+      `<p style="color:#f87171;padding:1rem;text-align:center">Failed to load booking details.</p>`;
+  }
+}
+
+// ── CREATE MODAL ──────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('cTripId').value       = '';
+  document.getElementById('cSeatFieldWrap').style.display = 'none';
+  document.getElementById('cSeatRows').innerHTML = '';
+  document.getElementById('cTripErr').textContent = '';
+  document.getElementById('createError').style.display = 'none';
+  seatRowCount   = 0;
+  availableSeats = [];
+  document.getElementById('createModal').style.display = 'flex';
+}
+async function loadTripSeats() {
+  const tripId = document.getElementById('cTripId').value;
+  document.getElementById('cSeatFieldWrap').style.display = 'none';
+  document.getElementById('cSeatRows').innerHTML = '';
+  availableSeats = [];
+  seatRowCount   = 0;
+  if (!tripId) return;
+
+  document.getElementById('cSeatFieldWrap').style.display = 'block';
+  document.getElementById('cSeatPicker').innerHTML =
+    '<option value="">Loading seats...</option>';
+
+  try {
+    const res  = await fetch(`/api/trip-detail/${tripId}/seats/`);
+    const data = await res.json();
+
+    if (!res.ok || data.hasErrors) {
+      document.getElementById('cSeatPicker').innerHTML =
+        '<option value="">Failed to load seats</option>';
+      return;
+    }
+
+    const seats = data.result?.seats || [];
+    availableSeats = seats.filter(s => s.seatStatusId === 1);
+
+    const picker = document.getElementById('cSeatPicker');
+    if (availableSeats.length === 0) {
+      picker.innerHTML = '<option value="">No available seats on this trip</option>';
+      return;
+    }
+
+    picker.innerHTML = '<option value="">Pick a seat to add...</option>';
+    availableSeats.forEach(s => {
+      const o = document.createElement('option');
+      o.value       = s.id;
+      o.textContent = `Seat ${s.busSeatName}`;
+      picker.appendChild(o);
+    });
+  } catch (err) {
+    document.getElementById('cSeatPicker').innerHTML =
+      '<option value="">Error loading seats</option>';
+    console.error('loadTripSeats error:', err);
+  }
+}
+
+function addSeatRow() {
+  const picker = document.getElementById('cSeatPicker');
+  const seatId = picker.value;
+  if (!seatId) return;
+
+  const seat = availableSeats.find(s => String(s.id) === seatId);
+  if (!seat) return;
+
+  const rowId = ++seatRowCount;
+  const row   = document.createElement('div');
+  row.className = 'seat-row';
+  row.id        = `seatRow_${rowId}`;
+  row.innerHTML = `
+    <div class="seat-row-header">
+      <span class="seat-row-label"><i class="fas fa-chair"></i> Seat ${seat.busSeatName}</span>
+      <button type="button" class="seat-row-remove" onclick="removeSeatRow(${rowId})"><i class="fas fa-times"></i></button>
+    </div>
+    <input type="hidden" id="sr_seatId_${rowId}" value="${seat.id}" />
+    <input type="hidden" id="sr_seatNum_${rowId}" value="${seat.busSeatName}" />
+    <div class="seat-row-fields">
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> Passenger Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="sr_name_${rowId}" placeholder="Full name" autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-phone"></i> Phone <span class="req">*</span></label>
+        <input type="text" class="form-input" id="sr_phone_${rowId}" placeholder="09XXXXXXXX" autocomplete="off" />
+      </div>
+    </div>`;
+  document.getElementById('cSeatRows').appendChild(row);
+
+  // Remove from picker
+  picker.querySelector(`option[value="${seatId}"]`)?.remove();
+  picker.value = '';
+}
+
+function removeSeatRow(rowId) {
+  const row    = document.getElementById(`seatRow_${rowId}`);
+  const seatId = document.getElementById(`sr_seatId_${rowId}`)?.value;
+  const seatNum= document.getElementById(`sr_seatNum_${rowId}`)?.value;
+  if (row) row.remove();
+  // Restore to picker
+  if (seatId) {
+    const picker = document.getElementById('cSeatPicker');
+    const o = document.createElement('option'); o.value = seatId; o.textContent = `Seat ${seatNum}`;
+    picker.appendChild(o);
+  }
+}
+
+async function submitCreate() {
+  const tripId = document.getElementById('cTripId').value;
+  if (!tripId) {
+    document.getElementById('cTripErr').textContent = 'Please select a trip';
+    return;
+  }
+  document.getElementById('cTripErr').textContent = '';
+
+  // Collect seat rows
+  const seatRows = document.querySelectorAll('#cSeatRows .seat-row');
+  if (seatRows.length === 0) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Please add at least one passenger seat.';
+    return;
+  }
+
+  const seats = [];
+  let valid = true;
+  seatRows.forEach(row => {
+    const rowId = row.id.replace('seatRow_', '');
+    const seatId = document.getElementById(`sr_seatId_${rowId}`)?.value;
+    const name   = document.getElementById(`sr_name_${rowId}`)?.value.trim();
+    const phone  = document.getElementById(`sr_phone_${rowId}`)?.value.trim();
+    if (!name || !phone) { valid = false; return; }
+    seats.push({ tripSeatId: parseInt(seatId), passengerName: name, passengerPhoneNumber: phone });
+  });
+
+  if (!valid) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Please fill in all passenger name and phone fields.';
+    return;
+  }
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/bookings/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ tripInstanceId: parseInt(tripId), seats }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      const code = data.result?.code || '';
+      showToast(`Booking created${code ? ' — Code: ' + code : ''}`, 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create booking.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── EDIT MODAL ────────────────────────────────────────
+async function openEditModal(bookingId, bookingData) {
+  let b = bookingData;
+  if (!b) {
+    try {
+      const res  = await fetch(`/api/bookings/${bookingId}/`);
+      const data = await res.json();
+      b = data.result || data;
+    } catch { return; }
+  }
+
+  document.getElementById('editBookingId').value     = b.id;
+  document.getElementById('eStatusId').value         = b.statusId || '';
+  document.getElementById('editModalSub').textContent = `Booking #${b.id}${b.code ? ' · ' + b.code : ''}`;
+
+  // Build editable passenger rows
+  const rows = document.getElementById('eSeatRows');
+  rows.innerHTML = (b.seats || []).map(s => `
+    <div class="seat-row">
+      <div class="seat-row-header">
+        <span class="seat-row-label"><i class="fas fa-chair"></i> Seat ${s.seatNumber}</span>
+      </div>
+      <input type="hidden" class="e-seat-id"       value="${s.id}" />
+      <input type="hidden" class="e-seat-tripSeatId" value="${s.tripSeatId}" />
+      <div class="seat-row-fields">
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-user"></i> Passenger Name</label>
+          <input type="text" class="form-input e-seat-name"  value="${s.passengerName || ''}" />
+        </div>
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-phone"></i> Phone</label>
+          <input type="text" class="form-input e-seat-phone" value="${s.passengerPhoneNumber || ''}" />
+        </div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+async function submitEdit() {
+  const id       = parseInt(document.getElementById('editBookingId').value);
+  const statusId = document.getElementById('eStatusId').value;
+
+  if (!statusId) {
+    document.getElementById('eStatusErr').textContent = 'Please select a status';
+    return;
+  }
+  document.getElementById('eStatusErr') && (document.getElementById('eStatusErr').textContent = '');
+
+  // Collect seat edits
+  const seatIds    = document.querySelectorAll('#eSeatRows .e-seat-id');
+  const tripSeatIds= document.querySelectorAll('#eSeatRows .e-seat-tripSeatId');
+  const names      = document.querySelectorAll('#eSeatRows .e-seat-name');
+  const phones     = document.querySelectorAll('#eSeatRows .e-seat-phone');
+  const seats      = Array.from(seatIds).map((el, i) => ({
+    id:                   parseInt(el.value),
+    tripSeatId:           parseInt(tripSeatIds[i].value),
+    passengerName:        names[i].value.trim(),
+    passengerPhoneNumber: phones[i].value.trim(),
+  }));
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/bookings/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ id, statusId: parseInt(statusId), seats }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast('Booking updated successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update booking.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── CANCEL ────────────────────────────────────────────
+function openCancelModal(bookingId, label) {
+  pendingCancelId = bookingId;
+  document.getElementById('cancelLabel').textContent     = label;
+  document.getElementById('cancelModalSub').textContent  = `Booking #${bookingId}`;
+  document.getElementById('cancelError').style.display   = 'none';
+  document.getElementById('cancelModal').style.display   = 'flex';
+}
+
+async function submitCancel() {
+  if (!pendingCancelId) return;
+  setBtnLoading('cancelBtn', 'cancelBtnLabel', 'cancelBtnLoading', true);
+  document.getElementById('cancelError').style.display = 'none';
+  try {
+    const res = await fetch(`/api/bookings/cancel/${pendingCancelId}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('cancelModal');
+      showToast('Booking cancelled', 'error');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to cancel.';
+      document.getElementById('cancelError').style.display = 'flex';
+      document.getElementById('cancelErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('cancelError').style.display = 'flex';
+    document.getElementById('cancelErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('cancelBtn', 'cancelBtnLabel', 'cancelBtnLoading', false);
+    pendingCancelId = null;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled        = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

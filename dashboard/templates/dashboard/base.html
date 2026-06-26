@@ -1,0 +1,278 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Bus Station Admin{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+  <style>
+    /* ── RTL overrides ─────────────────────────────────────────── */
+    body.rtl {
+      font-family: 'Cairo', 'DM Sans', sans-serif;
+      direction: rtl;
+    }
+    body.rtl .sidebar               { left: auto; right: 0; border-left: 1px solid var(--border); border-right: none; }
+    body.rtl .main-wrapper          { margin-left: 0; margin-right: var(--sidebar-w, 260px); }
+    body.rtl .sidebar.collapsed ~ .main-wrapper { margin-right: var(--sidebar-collapsed-w, 72px); margin-left: 0; }
+    body.rtl .kpi-card::before      { left: auto; right: 0; }
+    body.rtl .nav-item              { flex-direction: row-reverse; }
+    body.rtl .nav-indicator         { left: 0; right: auto; }
+    body.rtl .nav-group-toggle      { flex-direction: row-reverse; }
+    body.rtl .nav-group-left        { flex-direction: row-reverse; }
+    body.rtl .nav-group-chevron     { margin-left: 0; margin-right: auto; }
+    body.rtl .nav-child             { padding-right: 2.4rem; padding-left: 1rem; }
+    body.rtl .sidebar-header        { flex-direction: row-reverse; }
+    body.rtl .topbar-left           { order: 2; }
+    body.rtl .topbar-right          { order: 1; flex-direction: row-reverse; }
+    body.rtl .page-breadcrumb       { flex-direction: row-reverse; }
+    body.rtl .breadcrumb-sep        { transform: scaleX(-1); }
+    body.rtl .admin-avatar          { flex-direction: row-reverse; }
+    body.rtl .toolbar               { flex-direction: row-reverse; flex-wrap: wrap; }
+    body.rtl .toolbar-left          { flex-direction: row-reverse; }
+    body.rtl .toolbar-right         { flex-direction: row-reverse; }
+    body.rtl .form-label            { flex-direction: row-reverse; }
+    body.rtl .modal-header          { flex-direction: row-reverse; }
+    body.rtl .modal-close           { margin-left: 0; margin-right: auto; }
+    body.rtl .info-row              { flex-direction: row-reverse; }
+    body.rtl .info-row:hover        { transform: translateX(-4px); }
+    body.rtl .action-btns           { flex-direction: row-reverse; }
+    body.rtl .emp-cell              { flex-direction: row-reverse; }
+    body.rtl .kpi-sparkline         { margin-left: 0; margin-right: auto; }
+    body.rtl .modal-actions         { flex-direction: row-reverse; }
+    body.rtl select.form-input {
+      background-position: left 14px center;
+      padding-right: 14px; padding-left: 36px;
+    }
+
+    /* ── Language toggle button ────────────────────────────────── */
+    .lang-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 36px; padding: 0 14px; border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.04);
+      color: var(--text); font-size: 12.5px; font-weight: 700;
+      cursor: pointer; transition: all .18s;
+      white-space: nowrap;
+    }
+    .lang-btn:hover {
+      background: rgba(255,255,255,.09);
+      border-color: rgba(255,255,255,.15);
+      transform: translateY(-1px);
+    }
+    .lang-btn i { font-size: 13px; color: var(--text-mute); }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+  <!-- Ambient background orbs -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-logo">
+        <div class="brand-icon"><i class="fas fa-bus"></i></div>
+        <div class="brand-text">
+          <span class="brand-name" data-i18n="brand_name">BusStation</span>
+          <span class="brand-sub"  data-i18n="brand_sub">Admin Portal</span>
+        </div>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+    </div>
+
+    <div class="sidebar-section-label" data-i18n="section_operations">Operations</div>
+    <nav class="sidebar-nav">
+      <a href="{% url 'dashboard:home' %}" class="nav-item {% block nav_home %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-chart-pie"></i></div>
+        <span class="nav-label" data-i18n="nav_overview">Overview</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:routes_page' %}" class="nav-item {% block nav_routes %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-route"></i></div>
+        <span class="nav-label" data-i18n="nav_routes">Routes</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:trip_schedules' %}" class="nav-item {% block nav_trip_schedules %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-calendar-alt"></i></div>
+        <span class="nav-label" data-i18n="nav_trip_schedules">Trip Schedules</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:trip_instances' %}" class="nav-item {% block nav_trip_instances %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-ticket-alt"></i></div>
+        <span class="nav-label" data-i18n="nav_my_trips">My Trips</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:bookings' %}" class="nav-item {% block nav_bookings %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-bookmark"></i></div>
+        <span class="nav-label" data-i18n="nav_bookings">Bookings</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:buses' %}" class="nav-item {% block nav_buses %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-bus-alt"></i></div>
+        <span class="nav-label" data-i18n="nav_fleet">Fleet</span>
+        <div class="nav-indicator"></div>
+      </a>
+    </nav>
+
+    <div class="sidebar-section-label" data-i18n="section_management">Management</div>
+    <nav class="sidebar-nav">
+      <div class="nav-group" id="navGroupCompany">
+        <button class="nav-group-toggle" onclick="toggleNavGroup('navGroupCompany')" aria-expanded="false">
+          <div class="nav-group-left">
+            <div class="nav-icon"><i class="fas fa-building"></i></div>
+            <span class="nav-label" data-i18n="nav_company">Company</span>
+          </div>
+          <i class="fas fa-chevron-down nav-group-chevron"></i>
+        </button>
+        <div class="nav-group-children" id="navGroupCompanyChildren">
+          <a href="{% url 'dashboard:bus_owners' %}" class="nav-item nav-child {% block nav_company %}{% endblock %}">
+            <div class="nav-icon"><i class="fas fa-user-tie"></i></div>
+            <span class="nav-label" data-i18n="nav_bus_owners">Bus Owners</span>
+            <div class="nav-indicator"></div>
+          </a>
+          <a href="{% url 'dashboard:bus_companies' %}" class="nav-item nav-child {% block nav_bus_companies %}{% endblock %}">
+            <div class="nav-icon"><i class="fas fa-building"></i></div>
+            <span class="nav-label" data-i18n="nav_bus_companies">Bus Companies</span>
+            <div class="nav-indicator"></div>
+          </a>
+          <a href="{% url 'dashboard:offices' %}" class="nav-item nav-child {% block nav_offices %}{% endblock %}">
+            <div class="nav-icon"><i class="fas fa-building"></i></div>
+            <span class="nav-label" data-i18n="nav_offices">Company Offices</span>
+            <div class="nav-indicator"></div>
+          </a>
+          <a href="{% url 'dashboard:employees_page' %}" class="nav-item nav-child {% block nav_employees_company %}{% endblock %}">
+            <div class="nav-icon"><i class="fas fa-users"></i></div>
+            <span class="nav-label" data-i18n="nav_employees">Employees</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </div>
+      </div>
+
+      <a href="{% url 'dashboard:customer' %}" class="nav-item {% block nav_customer %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-user-shield"></i></div>
+        <span class="nav-label" data-i18n="nav_customers">Customers</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:location' %}" class="nav-item {% block nav_location %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-location-dot"></i></div>
+        <span class="nav-label" data-i18n="nav_location">Location</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:reports' %}" class="nav-item {% block nav_reports %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-chart-bar"></i></div>
+        <span class="nav-label" data-i18n="nav_reports">Reports</span>
+        <div class="nav-badge alert">19</div>
+        <div class="nav-indicator"></div>
+      </a>
+    </nav>
+
+    <div class="sidebar-section-label" data-i18n="section_admin">Administration</div>
+    <nav class="sidebar-nav">
+      <a href="{% url 'dashboard:roles' %}" class="nav-item {% block nav_roles %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-shield-alt"></i></div>
+        <span class="nav-label" data-i18n="nav_roles">Roles & Permissions</span>
+        <div class="nav-indicator"></div>
+      </a>
+      <a href="{% url 'dashboard:assign_roles' %}" class="nav-item {% block nav_assign_roles %}{% endblock %}">
+        <div class="nav-icon"><i class="fas fa-user-shield"></i></div>
+        <span class="nav-label" data-i18n="nav_assign_roles">Assign Roles</span>
+        <div class="nav-indicator"></div>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="admin-avatar">
+        <div class="avatar-ring">
+          <div class="avatar-inner"><i class="fas fa-user-tie"></i></div>
+        </div>
+        <div class="admin-info">
+          <span class="admin-name" data-i18n="admin_name">Admin</span>
+          <span class="admin-role" data-i18n="admin_role">Super Admin</span>
+        </div>
+        <button class="logout-btn" onclick="window.location.href='/logout/'">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-wrapper" id="mainWrapper">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-breadcrumb">
+          <span class="breadcrumb-root">BusStation</span>
+          <i class="fas fa-chevron-right breadcrumb-sep"></i>
+          <span class="breadcrumb-current">{% block breadcrumb %}Dashboard{% endblock %}</span>
+        </div>
+        <h1 class="page-title">{% block page_title %}Overview{% endblock %}</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="search-bar">
+          <i class="fas fa-search"></i>
+          <input type="text" id="globalSearch" data-i18n-placeholder="search_placeholder" placeholder="Search anything..." />
+        </div>
+
+        <!-- ── Language toggle ── -->
+        <button class="lang-btn" id="langToggleBtn" onclick="I18N.toggle()" title="Switch to Arabic">
+          <i class="fas fa-globe"></i> AR
+        </button>
+
+        <button class="topbar-btn" title="Notifications">
+          <i class="fas fa-bell"></i>
+          <span class="notif-dot"></span>
+        </button>
+        <button class="topbar-btn" title="Fullscreen" id="fullscreenBtn">
+          <i class="fas fa-expand"></i>
+        </button>
+        <div class="topbar-time" id="topbarTime">--:--</div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="page-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="{% static 'js/dashboard_i18n.js' %}"></script>
+  <script src="{% static 'js/dashboard.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+<script>
+function toggleNavGroup(groupId) {
+  const group    = document.getElementById(groupId);
+  const toggle   = group.querySelector('.nav-group-toggle');
+  const children = group.querySelector('.nav-group-children');
+  const isOpen   = children.classList.contains('open');
+  children.classList.toggle('open', !isOpen);
+  toggle.classList.toggle('open', !isOpen);
+  toggle.setAttribute('aria-expanded', String(!isOpen));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Auto-open active nav group
+  document.querySelectorAll('.nav-group').forEach(group => {
+    if (group.querySelector('.nav-child.active')) {
+      const toggle   = group.querySelector('.nav-group-toggle');
+      const children = group.querySelector('.nav-group-children');
+      children.classList.add('open');
+      toggle.classList.add('open');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  });
+});
+</script>
+</html>

@@ -1,0 +1,169 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Reservations — Bus Station{% endblock %}
+{% block breadcrumb %}Reservations{% endblock %}
+{% block page_title %}Reservations{% endblock %}
+{% block nav_reservations %}active{% endblock %}
+
+{% block content %}
+
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="tableSearch" placeholder="Search by name, ID, route..." />
+    </div>
+    <select class="filter-select" id="filterStatus">
+      <option value="">All Statuses</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="pending">Pending</option>
+      <option value="cancelled">Cancelled</option>
+      <option value="completed">Completed</option>
+    </select>
+    <select class="filter-select" id="filterCountry">
+      <option value="">All Countries</option>
+      <option value="syria">Syria</option>
+      <option value="lebanon">Lebanon</option>
+      <option value="jordan">Jordan</option>
+      <option value="turkey">Turkey</option>
+      <option value="iraq">Iraq</option>
+    </select>
+    <input type="date" class="filter-select" id="filterDate" />
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-primary" onclick="showToast('Opening new reservation form...','info')">
+      <i class="fas fa-plus"></i> New Reservation
+    </button>
+    <button class="btn-secondary" onclick="showToast('Exporting CSV...','success')">
+      <i class="fas fa-download"></i> Export
+    </button>
+  </div>
+</div>
+
+<div class="table-card">
+  <div class="table-meta">
+    <span id="tableCount">Showing {{ bookings|length }} reservations</span>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table" id="reservationsTable">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll" class="check-box" /></th>
+          <th class="sortable" data-col="0">Booking ID <i class="fas fa-sort"></i></th>
+          <th class="sortable" data-col="1">Passenger <i class="fas fa-sort"></i></th>
+          <th>From</th>
+          <th>To</th>
+          <th class="sortable" data-col="4">Date <i class="fas fa-sort"></i></th>
+          <th>Seat</th>
+          <th class="sortable" data-col="6">Price <i class="fas fa-sort"></i></th>
+          <th>Status</th>
+          <th>Payment</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bookings %}
+        <tr class="anim-row" style="--row-delay:{{ forloop.counter0 }}0ms"
+            data-status="{{ b.status|lower }}"
+            data-country="{{ b.trip_from|lower }}">
+          <td><input type="checkbox" class="check-box row-check" /></td>
+          <td><span class="id-badge">#{{ b.id }}</span></td>
+          <td>
+            <div class="passenger-cell">
+              <div class="mini-avatar">{{ b.customer_name|first }}</div>
+              <div>
+                <div class="passenger-name">{{ b.customer_name }}</div>
+                <div class="passenger-id">{{ b.passport }}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="country-tag">{{ b.trip_from }}</span></td>
+          <td><span class="country-tag dest">{{ b.trip_to }}</span></td>
+          <td>{{ b.date }}</td>
+          <td><span class="seat-badge">{{ b.seat }}</span></td>
+          <td><span class="price-tag">${{ b.price }}</span></td>
+          <td><span class="status-badge status-{{ b.status|lower }}">{{ b.status }}</span></td>
+          <td><span class="status-badge status-{{ b.payment_status|lower }}">{{ b.payment_status }}</span></td>
+          <td>
+            <div class="action-btns">
+              <a href="{% url 'dashboard:reservation_detail' b.id %}" class="action-btn view" title="View"><i class="fas fa-eye"></i></a>
+              <button class="action-btn edit" title="Edit" onclick="showToast('Edit mode for #{{ b.id }}','info')"><i class="fas fa-pen"></i></button>
+              <button class="action-btn delete" title="Delete" onclick="confirmDelete('{{ b.id }}')"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination">
+    <button class="page-btn" disabled><i class="fas fa-chevron-left"></i></button>
+    <button class="page-btn active">1</button>
+    <button class="page-btn">2</button>
+    <button class="page-btn">3</button>
+    <span class="page-ellipsis">…</span>
+    <button class="page-btn">12</button>
+    <button class="page-btn"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-icon danger"><i class="fas fa-trash-alt"></i></div>
+    <h3 class="modal-title">Delete Reservation?</h3>
+    <p class="modal-desc">This action cannot be undone. The reservation will be permanently removed.</p>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" onclick="closeModal('deleteModal');showToast('Reservation deleted','error')">Delete</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Table search & filter
+const searchInput = document.getElementById('tableSearch');
+const statusFilter = document.getElementById('filterStatus');
+const countryFilter = document.getElementById('filterCountry');
+
+function filterTable() {
+  const q = searchInput.value.toLowerCase();
+  const st = statusFilter.value.toLowerCase();
+  const cn = countryFilter.value.toLowerCase();
+  const rows = document.querySelectorAll('#reservationsTable tbody tr');
+  let count = 0;
+  rows.forEach(r => {
+    const text = r.innerText.toLowerCase();
+    const rowStatus = r.dataset.status || '';
+    const rowCountry = r.dataset.country || '';
+    const match = text.includes(q)
+      && (!st || rowStatus.includes(st))
+      && (!cn || rowCountry.includes(cn));
+    r.style.display = match ? '' : 'none';
+    if (match) count++;
+  });
+  document.getElementById('tableCount').textContent = `Showing ${count} reservations`;
+}
+
+searchInput.addEventListener('input', filterTable);
+statusFilter.addEventListener('change', filterTable);
+countryFilter.addEventListener('change', filterTable);
+
+document.getElementById('selectAll').addEventListener('change', function() {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = this.checked);
+});
+
+function confirmDelete(id) {
+  document.getElementById('deleteModal').style.display = 'flex';
+}
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+</script>
+{% endblock %}

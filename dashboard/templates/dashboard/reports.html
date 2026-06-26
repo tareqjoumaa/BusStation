@@ -1,0 +1,151 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Reports — Bus Station{% endblock %}
+{% block breadcrumb %}Reports{% endblock %}
+{% block page_title %}Financial Reports{% endblock %}
+{% block nav_reports %}active{% endblock %}
+
+{% block content %}
+
+<div class="reports-kpi-row">
+  <div class="kpi-card">
+    <span class="kpi-icon" style="--kc:#3b82f6"><i class="fas fa-dollar-sign"></i></span>
+    <div class="kpi-body">
+      <span class="kpi-label">Total Revenue (YTD)</span>
+      <span class="kpi-value counter" data-target="248500" data-prefix="$">0</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-icon" style="--kc:#10b981"><i class="fas fa-ticket-alt"></i></span>
+    <div class="kpi-body">
+      <span class="kpi-label">Tickets Sold (YTD)</span>
+      <span class="kpi-value counter" data-target="3240">0</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-icon" style="--kc:#f59e0b"><i class="fas fa-percentage"></i></span>
+    <div class="kpi-body">
+      <span class="kpi-label">Avg. Occupancy Rate</span>
+      <span class="kpi-value">78<span style="font-size:.8em">%</span></span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-icon" style="--kc:#8b5cf6"><i class="fas fa-chart-line"></i></span>
+    <div class="kpi-body">
+      <span class="kpi-label">Revenue Growth</span>
+      <span class="kpi-value">+14.2<span style="font-size:.8em">%</span></span>
+    </div>
+  </div>
+</div>
+
+<div class="reports-export-bar">
+  <span>Export Reports:</span>
+  <button class="btn-secondary sm" onclick="showToast('Exporting PDF...','success')"><i class="fas fa-file-pdf"></i> PDF</button>
+  <button class="btn-secondary sm" onclick="showToast('Exporting Excel...','success')"><i class="fas fa-file-excel"></i> Excel</button>
+  <button class="btn-secondary sm" onclick="showToast('Exporting CSV...','success')"><i class="fas fa-file-csv"></i> CSV</button>
+</div>
+
+<div class="charts-grid">
+  <div class="chart-card wide">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Revenue by Month</h3>
+        <p class="chart-sub">Full year breakdown</p>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="fullRevenueChart"></canvas>
+    </div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Revenue by Route</h3>
+        <p class="chart-sub">Top performing routes</p>
+      </div>
+    </div>
+    <div class="chart-wrap donut-wrap">
+      <canvas id="revenueRouteChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="table-card">
+  <div class="panel-header" style="padding:1.5rem 1.5rem 0">
+    <h3 class="panel-title"><i class="fas fa-table"></i> Monthly Breakdown</h3>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Month</th><th>Tickets Sold</th><th>Revenue</th><th>Expenses</th><th>Profit</th><th>Growth</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in monthly_report %}
+        <tr class="anim-row" style="--row-delay:{{ forloop.counter0 }}0ms">
+          <td><strong>{{ r.month }}</strong></td>
+          <td>{{ r.tickets }}</td>
+          <td class="price-tag">${{ r.revenue }}</td>
+          <td>${{ r.expenses }}</td>
+          <td class="price-tag">${{ r.profit }}</td>
+          <td>
+            <span class="growth-badge {% if r.growth >= 0 %}pos{% else %}neg{% endif %}">
+              <i class="fas fa-arrow-{% if r.growth >= 0 %}up{% else %}down{% endif %}"></i>
+              {{ r.growth }}%
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const rev = [14200,16800,15400,18900,21000,19500,23400,22100,25600,24800,27300,29500];
+
+  new Chart(document.getElementById('fullRevenueChart'), {
+    type:'bar',
+    data:{ labels:months, datasets:[{
+      label:'Revenue ($)', data:rev,
+      backgroundColor:'rgba(59,130,246,0.3)',
+      borderColor:'#3b82f6', borderWidth:2, borderRadius:6,
+      hoverBackgroundColor:'rgba(59,130,246,0.5)'
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#9aa4bf'}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#9aa4bf', callback:v=>'$'+v.toLocaleString()}}
+      },
+      animation:{ duration:1200, easing:'easeOutQuart' }
+    }
+  });
+
+  new Chart(document.getElementById('revenueRouteChart'), {
+    type:'doughnut',
+    data:{
+      labels:['Damascus→Beirut','Homs→Amman','Aleppo→Istanbul','Latakia→Amman','Other'],
+      datasets:[{
+        data:[34,22,18,14,12],
+        backgroundColor:['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444'],
+        borderWidth:0, hoverOffset:8
+      }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{color:'#9aa4bf', padding:12, font:{size:11}} }
+      },
+      animation:{ animateRotate:true, duration:1200 }
+    }
+  });
+});
+</script>
+{% endblock %}

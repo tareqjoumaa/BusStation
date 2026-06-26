@@ -1,0 +1,81 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Team — Bus Station{% endblock %}
+{% block breadcrumb %}Team{% endblock %}
+{% block page_title %}Team Management{% endblock %}
+{% block nav_employees %}active{% endblock %}
+
+{% block content %}
+
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" placeholder="Search employees..." />
+    </div>
+    <select class="filter-select">
+      <option value="">All Roles</option>
+      <option>Driver</option><option>Office Staff</option><option>Manager</option>
+    </select>
+    <select class="filter-select">
+      <option value="">All Offices</option>
+      <option>Damascus</option><option>Beirut</option><option>Amman</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-primary" onclick="showToast('Opening add employee form...','info')">
+      <i class="fas fa-user-plus"></i> Add Employee
+    </button>
+  </div>
+</div>
+
+<div class="cards-grid employees">
+  {% for emp in employees %}
+  <div class="employee-card anim-row" style="--row-delay:{{ forloop.counter0 }}0ms">
+    <div class="emp-avatar-ring">
+      <div class="emp-avatar">{{ emp.name|first }}</div>
+    </div>
+    <div class="emp-info">
+      <span class="emp-name">{{ emp.name }}</span>
+      <span class="emp-role-badge role-{{ emp.role|lower }}">{{ emp.role }}</span>
+    </div>
+    <div class="emp-details">
+      <div class="emp-detail-row">
+        <i class="fas fa-building"></i>
+        <span>{{ emp.office }}</span>
+      </div>
+      <div class="emp-detail-row">
+        <i class="fas fa-phone"></i>
+        <span>{{ emp.phone }}</span>
+      </div>
+      {% if emp.role == "Driver" %}
+      <div class="emp-detail-row">
+        <i class="fas fa-bus"></i>
+        <span>Bus {{ emp.assigned_bus }}</span>
+      </div>
+      <div class="emp-detail-row">
+        <i class="fas fa-route"></i>
+        <span>{{ emp.route }}</span>
+      </div>
+      {% endif %}
+    </div>
+    <div class="emp-perf">
+      <div class="perf-bar-wrap">
+        <span class="perf-label">Performance</span>
+        <div class="perf-bar">
+          <div class="perf-fill" style="width:{{ emp.performance }}%"></div>
+        </div>
+        <span class="perf-value">{{ emp.performance }}%</span>
+      </div>
+    </div>
+    <div class="emp-actions">
+      <button class="action-btn edit" onclick="showToast('Editing {{ emp.name }}','info')"><i class="fas fa-pen"></i></button>
+      <button class="action-btn view" onclick="showToast('Viewing profile of {{ emp.name }}','info')"><i class="fas fa-eye"></i></button>
+      <button class="action-btn delete" onclick="showToast('Removed {{ emp.name }}','error')"><i class="fas fa-trash"></i></button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

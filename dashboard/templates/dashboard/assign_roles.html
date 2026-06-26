@@ -1,0 +1,434 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Assign Roles — Bus Station{% endblock %}
+{% block breadcrumb %}Roles / Assign to Users{% endblock %}
+{% block page_title %}Assign Roles to Users{% endblock %}
+{% block nav_assign_roles %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/roles.css' %}">
+<link rel="stylesheet" href="{% static 'css/assign_roles.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="userSearch" placeholder="Search by email or username..." />
+    </div>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadUsers()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'">
+    <i class="fas fa-times"></i>
+  </button>
+</div>
+
+<!-- Stats bar -->
+<div class="ar-stats-bar" id="statsBar" style="display:none">
+  <div class="ar-stat">
+    <i class="fas fa-users"></i>
+    <span class="ar-stat-val" id="statTotal">0</span>
+    <span class="ar-stat-label">Total Users</span>
+  </div>
+  <div class="ar-stat-divider"></div>
+  <div class="ar-stat">
+    <i class="fas fa-filter"></i>
+    <span class="ar-stat-val" id="statShowing">0</span>
+    <span class="ar-stat-label">Showing</span>
+  </div>
+</div>
+
+<!-- Table card -->
+<div class="table-card">
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading users from API...</span>
+  </div>
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table" id="usersTable">
+      <thead>
+        <tr>
+          <th style="width:48px">#</th>
+          <th>User</th>
+          <th>Email</th>
+          <th>Current Roles</th>
+          <th style="width:120px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-users"></i></div>
+    <h3 class="empty-title">No users found</h3>
+    <p class="empty-desc">Try adjusting your search filter.</p>
+  </div>
+</div>
+
+<!-- ── ASSIGN ROLES MODAL ────────────────────────────── -->
+<div class="modal-overlay" id="assignModal" style="display:none">
+  <div class="assign-modal-box">
+
+    <!-- HEADER — fixed -->
+    <div class="assign-modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-user-shield"></i></div>
+      <div style="flex:1;min-width:0">
+        <h3 class="modal-title">Assign Roles</h3>
+        <p class="modal-subtitle" id="assignModalSubtitle">Select roles for this user</p>
+      </div>
+      <button class="modal-close" onclick="closeAssignModal()"><i class="fas fa-times"></i></button>
+    </div>
+
+    <!-- USER STRIP — fixed -->
+    <div class="assign-user-strip">
+      <div class="user-strip-avatar" id="userStripAvatar">U</div>
+      <div class="user-strip-info">
+        <span class="user-strip-email" id="userStripEmail">—</span>
+        <span class="user-strip-id" id="userStripId">—</span>
+      </div>
+    </div>
+
+    <!-- LOADING STATE -->
+    <div class="roles-modal-loading" id="rolesModalLoading">
+      <div class="loading-spinner sm"></div>
+      <span>Loading roles...</span>
+    </div>
+
+    <!-- ROLES SECTION — scrollable middle -->
+    <div id="rolesListWrap" style="display:none">
+
+      <!-- Search toolbar — fixed inside roles section -->
+      <div class="assign-search-bar">
+        <div class="search-input-wrap" style="flex:1">
+          <i class="fas fa-search"></i>
+          <input type="text" id="roleSearchModal"
+                 placeholder="Search roles..."
+                 oninput="filterModalRoles()" />
+        </div>
+        <div class="roles-selected-count">
+          <span id="rolesSelectedCount">0</span> selected
+        </div>
+      </div>
+
+      <!-- Scrollable roles list -->
+      <div class="assign-roles-scroll" id="rolesList"></div>
+
+    </div>
+
+    <!-- ERROR — fixed -->
+    <div class="assign-modal-error" id="assignError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i>
+      <span id="assignErrorMsg"></span>
+    </div>
+
+    <!-- ACTIONS — always pinned to bottom -->
+    <div class="assign-modal-actions">
+      <button class="btn-secondary" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn-primary" id="saveRolesBtn" onclick="saveUserRoles()">
+        <span id="saveRolesBtnLabel"><i class="fas fa-save"></i> Save User Roles</span>
+        <span id="saveRolesBtnLoading" style="display:none">
+          <span class="btn-spinner"></span> Saving...
+        </span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allUsers       = [];
+let filteredUsers  = [];
+let allRoles       = [];
+let selectedUserId = null;
+let userRoles      = new Set();
+let userRolesCache = {};
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadUsers();
+  loadAllRoles();
+  document.getElementById('userSearch').addEventListener('input', applyFilter);
+  document.getElementById('assignModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('assignModal')) closeAssignModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAssignModal();
+  });
+});
+
+async function loadUsers() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const res  = await fetch('/api/roles/users/');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    allUsers = Array.isArray(data.result) ? data.result
+             : Array.isArray(data) ? data : [];
+    applyFilter();
+    document.getElementById('statsBar').style.display  = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load users: ' + err.message;
+    setTableLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+async function loadAllRoles() {
+  try {
+    const res  = await fetch('/api/roles/');
+    const data = await res.json();
+    allRoles   = Array.isArray(data.result) ? data.result : [];
+  } catch (err) { console.error('Failed to load roles:', err); }
+}
+
+function applyFilter() {
+  const q = document.getElementById('userSearch').value.toLowerCase().trim();
+  filteredUsers = allUsers.filter(u =>
+    !q || `${u.email} ${u.userName}`.toLowerCase().includes(q)
+  );
+  renderTable();
+  document.getElementById('statTotal').textContent   = allUsers.length;
+  document.getElementById('statShowing').textContent = filteredUsers.length;
+}
+
+function renderTable() {
+  setTableLoading(false);
+  if (filteredUsers.length === 0) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  document.getElementById('usersBody').innerHTML = filteredUsers.map((user, i) => {
+    const email    = user.email || user.userName || '—';
+    const initial  = email.charAt(0).toUpperCase();
+    const shortId  = user.id ? user.id.substring(0, 8) + '…' : '—';
+    const cached   = userRolesCache[user.id];
+    let rolesHtml;
+    if (cached && cached.size > 0)       rolesHtml = [...cached].map(n => `<span class="role-pill">${n}</span>`).join('');
+    else if (cached && cached.size === 0) rolesHtml = '<span class="no-roles-tag">No roles assigned</span>';
+    else                                  rolesHtml = '<span class="role-pill-loading">Loading...</span>';
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms" id="user-row-${user.id}">
+      <td><span class="id-badge">${i + 1}</span></td>
+      <td>
+        <div class="user-cell">
+          <div class="user-cell-avatar">${initial}</div>
+          <div class="user-cell-info">
+            <span class="user-cell-name">${email}</span>
+            <span class="user-cell-id">${shortId}</span>
+          </div>
+        </div>
+      </td>
+      <td><span class="email-text">${email}</span></td>
+      <td><div class="roles-pills" id="roles-pills-${user.id}">${rolesHtml}</div></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn edit assign-btn" title="Assign roles"
+            onclick="openAssignModal('${user.id}', '${email.replace(/'/g, "\\'")}')">
+            <i class="fas fa-user-shield"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  preloadAllUserRoles();
+}
+
+async function preloadAllUserRoles() {
+  const promises = allUsers
+    .filter(u => userRolesCache[u.id] === undefined)
+    .map(async (user) => {
+      try {
+        const res    = await fetch(`/api/roles/user-roles/?userId=${user.id}`);
+        const data   = await res.json();
+        const assigned  = Array.isArray(data.result) ? data.result : [];
+        const roleNames = new Set(assigned.map(r => r.roleName).filter(Boolean));
+        userRolesCache[user.id] = roleNames;
+        const el = document.getElementById(`roles-pills-${user.id}`);
+        if (el) el.innerHTML = roleNames.size > 0
+          ? [...roleNames].map(n => `<span class="role-pill">${n}</span>`).join('')
+          : '<span class="no-roles-tag">No roles assigned</span>';
+      } catch {
+        userRolesCache[user.id] = new Set();
+        const el = document.getElementById(`roles-pills-${user.id}`);
+        if (el) el.innerHTML = '<span class="no-roles-tag">—</span>';
+      }
+    });
+  await Promise.allSettled(promises);
+}
+
+async function openAssignModal(userId, email) {
+  selectedUserId = userId;
+  userRoles      = new Set();
+  const initial  = email.charAt(0).toUpperCase();
+  document.body.style.overflow = 'hidden';
+
+  document.getElementById('assignModalSubtitle').textContent = email;
+  document.getElementById('userStripAvatar').textContent     = initial;
+  document.getElementById('userStripEmail').textContent      = email;
+  document.getElementById('userStripId').textContent         = userId;
+  document.getElementById('assignError').style.display       = 'none';
+  document.getElementById('roleSearchModal').value           = '';
+  document.getElementById('assignModal').style.display       = 'flex';
+  document.getElementById('rolesModalLoading').style.display = 'flex';
+  document.getElementById('rolesListWrap').style.display     = 'none';
+  try {
+    const res      = await fetch(`/api/roles/user-roles/?userId=${userId}`);
+    const data     = await res.json();
+    const assigned = Array.isArray(data.result) ? data.result : [];
+    userRoles      = new Set(assigned.map(r => r.roleId));
+    userRolesCache[userId] = new Set(assigned.map(r => r.roleName).filter(Boolean));
+    renderRolesList();
+    updateRolesSelectedCount();
+  } catch (err) {
+    document.getElementById('assignError').style.display  = 'flex';
+    document.getElementById('assignErrorMsg').textContent = 'Failed to load user roles: ' + err.message;
+  } finally {
+    document.getElementById('rolesModalLoading').style.display = 'none';
+    document.getElementById('rolesListWrap').style.display     = 'block';
+  }
+}
+
+function renderRolesList(filter = '') {
+  const q       = filter.toLowerCase().trim();
+  const visible = allRoles.filter(r => !q || r.name.toLowerCase().includes(q));
+  const system  = visible.filter(r => r.isSystemRole);
+  const company = visible.filter(r => !r.isSystemRole);
+  let html = '';
+  if (system.length)  { html += `<div class="roles-group-label"><i class="fas fa-globe"></i> System Roles</div>`; html += system.map(renderRoleItem).join(''); }
+  if (company.length) { html += `<div class="roles-group-label"><i class="fas fa-industry"></i> Company Roles</div>`; html += company.map(renderRoleItem).join(''); }
+  if (!visible.length) html = '<div class="roles-empty">No roles match your search.</div>';
+  document.getElementById('rolesList').innerHTML = html;
+}
+
+function renderRoleItem(role) {
+  const checked = userRoles.has(role.id);
+  const tag     = role.isSystemRole
+    ? '<span class="role-type-pill system">System</span>'
+    : '<span class="role-type-pill company">Company</span>';
+  return `
+  <div class="role-item ${checked ? 'role-item-checked' : ''}" id="role-item-${role.id}"
+       onclick="toggleRole('${role.id}')">
+    <div class="custom-checkbox sm ${checked ? 'checked' : ''}" id="role-cb-${role.id}">
+      <i class="fas fa-check check-icon"></i>
+    </div>
+    <div class="role-item-info">
+      <span class="role-item-name">${role.name}</span>
+      ${tag}
+    </div>
+  </div>`;
+}
+
+function toggleRole(roleId) {
+  const cb   = document.getElementById(`role-cb-${roleId}`);
+  const item = document.getElementById(`role-item-${roleId}`);
+  if (userRoles.has(roleId)) {
+    userRoles.delete(roleId);
+    cb.classList.remove('checked');
+    item.classList.remove('role-item-checked');
+  } else {
+    userRoles.add(roleId);
+    cb.classList.add('checked');
+    item.classList.add('role-item-checked');
+  }
+  updateRolesSelectedCount();
+}
+
+function filterModalRoles() {
+  renderRolesList(document.getElementById('roleSearchModal').value);
+}
+
+function updateRolesSelectedCount() {
+  document.getElementById('rolesSelectedCount').textContent = userRoles.size;
+}
+
+async function saveUserRoles() {
+  if (!selectedUserId) return;
+  document.getElementById('assignError').style.display = 'none';
+  setBtnLoading('saveRolesBtn', 'saveRolesBtnLabel', 'saveRolesBtnLoading', true);
+
+  const payload = { userId: selectedUserId, rolesIds: Array.from(userRoles) };
+  console.log('SAVE USER ROLES:', JSON.stringify(payload, null, 2));
+
+  try {
+    const res  = await fetch('/api/roles/assign-to-user/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    console.log('RESPONSE:', JSON.stringify(data, null, 2));
+
+    const ok = res.ok && (data.hasErrors === false || data.hasErrors === null || data.hasErrors === undefined);
+    if (ok) {
+      const roleNames = new Set(allRoles.filter(r => userRoles.has(r.id)).map(r => r.name));
+      userRolesCache[selectedUserId] = roleNames;
+      const el = document.getElementById(`roles-pills-${selectedUserId}`);
+      if (el) el.innerHTML = roleNames.size > 0
+        ? [...roleNames].map(n => `<span class="role-pill">${n}</span>`).join('')
+        : '<span class="no-roles-tag">No roles assigned</span>';
+      showToast('Roles assigned successfully', 'success');
+      closeAssignModal();
+    } else {
+      let msg = 'Failed to save roles.';
+      if (data.validationErrors?.length) msg = data.validationErrors.map(e => e.description || e.message || JSON.stringify(e)).join(', ');
+      else if (data.message)             msg = data.message;
+      else if (data.error)               msg = data.error;
+      else if (typeof data.result === 'string' && data.result) msg = data.result;
+      document.getElementById('assignError').style.display  = 'flex';
+      document.getElementById('assignErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('assignError').style.display  = 'flex';
+    document.getElementById('assignErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('saveRolesBtn', 'saveRolesBtnLabel', 'saveRolesBtnLoading', false);
+  }
+}
+
+function closeAssignModal() {
+  document.body.style.overflow = '';
+  document.getElementById('assignModal').style.display = 'none';
+  selectedUserId = null;
+  userRoles      = new Set();
+}
+function setTableLoading(loading) {
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) { document.getElementById('tableWrap').style.display = 'none'; document.getElementById('emptyState').style.display = 'none'; }
+}
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled                  = loading;
+  document.getElementById(labelId).style.display  = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display   = loading ? 'inline-flex' : 'none';
+}
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

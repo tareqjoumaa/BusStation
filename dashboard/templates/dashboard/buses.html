@@ -1,0 +1,465 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Fleet — Bus Station{% endblock %}
+{% block breadcrumb %}Fleet{% endblock %}
+{% block page_title %}Bus Fleet{% endblock %}
+{% block nav_buses %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/buses.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="busSearch" placeholder="Search by name or office..." />
+    </div>
+    <select class="filter-select" id="filterOffice">
+      <option value="">All Offices</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" id="refreshBtn" onclick="loadBuses()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <a href="{% url 'dashboard:bus_create' %}" class="btn-primary">
+      <i class="fas fa-plus"></i> Add Bus
+    </a>
+  </div>
+</div>
+
+<!-- API error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- Fleet Stats -->
+<div class="fleet-stats" id="fleetStats" style="display:none">
+  <div class="fs-card" style="--fc:#3b82f6">
+    <div class="fs-icon"><i class="fas fa-bus"></i></div>
+    <div class="fs-body">
+      <span class="fs-val" id="statTotal">0</span>
+      <span class="fs-label">Total Buses</span>
+    </div>
+  </div>
+  <div class="fs-card" style="--fc:#10b981">
+    <div class="fs-icon"><i class="fas fa-chair"></i></div>
+    <div class="fs-body">
+      <span class="fs-val" id="statSeats">0</span>
+      <span class="fs-label">Total Seats</span>
+    </div>
+  </div>
+  <div class="fs-card" style="--fc:#8b5cf6">
+    <div class="fs-icon"><i class="fas fa-building"></i></div>
+    <div class="fs-body">
+      <span class="fs-val" id="statOffices">0</span>
+      <span class="fs-label">Offices</span>
+    </div>
+  </div>
+  <div class="fs-card" style="--fc:#f59e0b">
+    <div class="fs-icon"><i class="fas fa-filter"></i></div>
+    <div class="fs-body">
+      <span class="fs-val" id="statShowing">0</span>
+      <span class="fs-label">Showing</span>
+    </div>
+  </div>
+</div>
+
+<!-- Table card -->
+<div class="table-card">
+
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading fleet from API...</span>
+  </div>
+
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table" id="busesTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Bus Name</th>
+          <th>Office</th>
+          <th>Seats</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Maintenance</th>
+          <th>Added On</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="busesBody"></tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-bus"></i></div>
+    <h3 class="empty-title">No buses found</h3>
+    <p class="empty-desc">Add your first bus to the fleet.</p>
+    <a href="{% url 'dashboard:bus_create' %}" class="btn-primary"><i class="fas fa-plus"></i> Add Bus</a>
+  </div>
+
+  <div class="pagination" id="paginationWrap" style="display:none">
+    <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<!-- View Detail Modal -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-bus"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewBusName">Bus Details</h3>
+        <p class="modal-subtitle" id="viewBusId">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="bus-detail-grid" id="busDetailGrid"></div>
+      <div class="seats-section" id="seatsSection"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let pendingDeleteId   = null;
+let pendingDeleteName = '';
+ 
+function confirmDelete(id, name) {
+  pendingDeleteId   = id;
+  pendingDeleteName = name;
+  document.getElementById('deleteBusName').textContent      = name || `Bus #${id}`;
+  document.getElementById('deleteModalSubtitle').textContent = `Bus #${id} · ${name || '—'}`;
+  document.getElementById('deleteModal').style.display      = 'flex';
+}
+ 
+async function executeDelete() {
+  if (!pendingDeleteId) return;
+ 
+  // Loading state
+  document.getElementById('confirmDeleteBtn').disabled        = true;
+  document.getElementById('deleteBtnLabel').style.display   = 'none';
+  document.getElementById('deleteBtnLoading').style.display = 'inline-flex';
+ 
+  try {
+    const res  = await fetch(`/api/buses/${pendingDeleteId}/delete/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+ 
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast(`Bus "${pendingDeleteName}" deleted successfully`, 'error');
+      // Remove from local array and re-render — no full reload needed
+      allBuses      = allBuses.filter(b => b.id !== pendingDeleteId);
+      filteredBuses = filteredBuses.filter(b => b.id !== pendingDeleteId);
+      renderTable();
+      updateStats();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete bus.';
+      showToast(msg, 'error');
+      closeModal('deleteModal');
+    }
+  } catch (err) {
+    showToast('Network error. Please try again.', 'error');
+    closeModal('deleteModal');
+  } finally {
+    document.getElementById('confirmDeleteBtn').disabled        = false;
+    document.getElementById('deleteBtnLabel').style.display   = 'inline-flex';
+    document.getElementById('deleteBtnLoading').style.display = 'none';
+    pendingDeleteId   = null;
+    pendingDeleteName = '';
+  }
+}
+ 
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+  
+const API_BASE = '/dashboard/api';
+const TOKEN    = '{{ token }}';
+const AUTH     = { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'Accept': 'application/json' };
+
+// Static display data — add real values when API supports it
+const STATIC_TYPES   = ['VIP', 'Standard', 'Express', 'Luxury', 'Standard'];
+const STATIC_STATUS  = ['Active', 'Active', 'Active', 'Maintenance', 'Idle'];
+const STATIC_MAINT   = [false, false, true, false, false];
+
+let allBuses      = [];
+let filteredBuses = [];
+let currentPage   = 1;
+const PAGE_SIZE   = 12;
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadBuses();
+  document.getElementById('busSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterOffice').addEventListener('change', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load buses ────────────────────────────────────────
+async function loadBuses() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+
+  try {
+    const res = await fetch(`/api/buses/`);
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    const data = await res.json();
+
+    console.log("RAW API:", data);
+
+    // ✅ SAFE extraction
+    let buses = data?.result;
+
+    if (!Array.isArray(buses)) {
+      console.warn("Unexpected result format:", buses);
+      buses = [];
+    }
+
+    allBuses = buses;
+
+    // offices
+    const officeSet = new Map();
+    allBuses.forEach(b => {
+      if (b.busCompanyOfficeId) {
+        officeSet.set(
+          b.busCompanyOfficeId,
+          b.officeName || `Office #${b.busCompanyOfficeId}`
+        );
+      }
+    });
+
+    const sel = document.getElementById('filterOffice');
+    sel.innerHTML = '<option value="">All Offices</option>';
+
+    officeSet.forEach((name, id) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+
+    applyFilters();
+    updateStats();
+
+    document.getElementById('fleetStats').style.display = 'grid';
+    document.getElementById('apiBanner').style.display = 'none';
+
+  } catch (err) {
+    console.error("UI ERROR:", err);
+
+    document.getElementById('apiBanner').style.display = 'flex';
+    document.getElementById('apiBannerMsg').textContent =
+      'UI error: ' + err.message;
+
+  } finally {
+    setTableLoading(false);
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Filter ────────────────────────────────────────────
+function applyFilters() {
+  const q = document.getElementById('busSearch').value.toLowerCase().trim();
+  const office = document.getElementById('filterOffice').value;
+
+  filteredBuses = allBuses.filter(b => {
+    const name = (b.name || '').toLowerCase();
+    const off  = (b.officeName || '').toLowerCase();
+
+    const matchText =
+      !q || name.includes(q) || off.includes(q);
+
+    const matchOffice =
+      !office || String(b.busCompanyOfficeId) == String(office);
+
+    return matchText && matchOffice;
+  });
+
+  currentPage = 1;
+  renderTable();
+  updateStats();
+} 
+
+// ── Render table ──────────────────────────────────────
+function renderTable() {
+  setTableLoading(false);
+  if (filteredBuses.length === 0) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredBuses.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('busesBody').innerHTML = page.map((bus, i) => {
+    const idx       = i % STATIC_TYPES.length;
+    const type      = STATIC_TYPES[idx];
+    const status    = STATIC_STATUS[idx];
+    const maint     = STATIC_MAINT[idx];
+    const seats     = bus.seats || [];
+    const seatsCount = seats.length;
+    const date      = bus.createdOn ? new Date(bus.createdOn).toLocaleDateString('en-GB') : '—';
+    const initials  = (bus.name || 'B').charAt(0).toUpperCase();
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 25}ms">
+      <td><span class="id-badge">#${bus.id}</span></td>
+      <td>
+        <div class="bus-name-cell">
+          <div class="bus-avatar">${initials}</div>
+          <div>
+            <div class="bus-name-text">${bus.name || '—'}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="office-tag"><i class="fas fa-building"></i> ${bus.officeName || '—'}</span></td>
+      <td>
+        <div class="seats-cell">
+          <span class="seat-count-badge">${seatsCount}</span>
+          <span class="seats-label">seats</span>
+        </div>
+      </td>
+      <td><span class="type-tag">${type}</span></td>
+      <td><span class="status-badge status-${status.toLowerCase()}">${status}</span></td>
+      <td>${maint
+        ? '<span class="status-badge status-pending"><i class="fas fa-wrench"></i> Due Soon</span>'
+        : '<span class="status-badge status-completed"><i class="fas fa-check"></i> OK</span>'
+      }</td>
+      <td><span class="date-text">${date}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view" title="View details"
+            onclick='openViewModal(${JSON.stringify(bus).replace(/'/g,"&#39;")})'>
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="action-btn delete" title="Delete bus"
+            onclick="confirmDelete(${bus.id}, '${(bus.name || '').replace(/'/g, "\\'")}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const totalPages = Math.ceil(filteredBuses.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredBuses.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+// ── Stats ─────────────────────────────────────────────
+function updateStats() {
+  const totalSeats = allBuses.reduce((s, b) => s + (b.seats?.length || 0), 0);
+  const offices    = new Set(allBuses.map(b => b.busCompanyOfficeId)).size;
+  document.getElementById('statTotal').textContent   = allBuses.length;
+  document.getElementById('statSeats').textContent   = totalSeats;
+  document.getElementById('statOffices').textContent = offices;
+  document.getElementById('statShowing').textContent = filteredBuses.length;
+}
+
+// ── View modal ────────────────────────────────────────
+function openViewModal(bus) {
+  document.getElementById('viewBusName').textContent = bus.name || 'Bus Details';
+  document.getElementById('viewBusId').textContent   = `ID #${bus.id} · ${bus.officeName || '—'}`;
+  document.getElementById('viewModal').style.display = 'flex';
+
+  const date = bus.createdOn ? new Date(bus.createdOn).toLocaleString('en-GB') : '—';
+  document.getElementById('busDetailGrid').innerHTML = `
+    <div class="bd-row"><span class="bd-label">Bus ID</span><span class="bd-value"><span class="id-badge">#${bus.id}</span></span></div>
+    <div class="bd-row"><span class="bd-label">Bus Name</span><span class="bd-value bus-name-text">${bus.name || '—'}</span></div>
+    <div class="bd-row"><span class="bd-label">Office</span><span class="bd-value"><span class="office-tag"><i class="fas fa-building"></i> ${bus.officeName || '—'}</span></span></div>
+    <div class="bd-row"><span class="bd-label">Office ID</span><span class="bd-value">${bus.busCompanyOfficeId || '—'}</span></div>
+    <div class="bd-row"><span class="bd-label">Total Seats</span><span class="bd-value"><span class="seat-count-badge">${bus.seats?.length || 0}</span></span></div>
+    <div class="bd-row"><span class="bd-label">Created On</span><span class="bd-value date-text">${date}</span></div>
+  `;
+
+  const seats = bus.seats || [];
+  document.getElementById('seatsSection').innerHTML = seats.length === 0
+    ? '<p class="no-seats">No seats registered.</p>'
+    : `<div class="seats-header"><i class="fas fa-chair"></i> Seats (${seats.length})</div>
+       <div class="seats-grid">${seats.map(s =>
+         `<div class="seat-chip">${s.seatNumber}</div>`
+       ).join('')}</div>`;
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function setTableLoading(loading) {
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
+</script>
+
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-trash-alt"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Bus?</h3>
+        <p class="modal-subtitle" id="deleteModalSubtitle">This action cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" style="padding:1rem 1.6rem">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete bus <strong id="deleteBusName">—</strong>.
+           All associated seat records will also be removed.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="confirmDeleteBtn" onclick="executeDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete Bus</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+ 
+
+{% endblock %}

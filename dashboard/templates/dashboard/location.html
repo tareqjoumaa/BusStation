@@ -1,0 +1,618 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Locations — Bus Station{% endblock %}
+{% block breadcrumb %}Analytics / Locations{% endblock %}
+{% block page_title %}Location Management{% endblock %}
+{% block nav_locations %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/location.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="locationSearch" placeholder="Search by city or governorate..." />
+    </div>
+    <select class="filter-select" id="filterGovernorate">
+      <option value="">All Governorates</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-plus"></i> New City
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPI Stats -->
+<div class="location-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#6366f1">
+    <div class="kpi-icon"><i class="fas fa-map"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statGovs">0</span>
+      <span class="kpi-label">Governorates</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-map-marked-alt"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-city"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statCities">0</span>
+      <span class="kpi-label">Total Cities</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-bar"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#f59e0b">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#3b82f6">
+    <div class="kpi-icon"><i class="fas fa-map-pin"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statAvg">0</span>
+      <span class="kpi-label">Avg Cities / Gov</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-line"></i></div>
+  </div>
+</div>
+
+<!-- Split layout: Governorate list + Cities table -->
+<div class="loc-layout" id="locLayout" style="display:none">
+
+  <!-- Left: Governorate panel -->
+  <div class="gov-panel">
+    <div class="gov-panel-header">
+      <h4><i class="fas fa-map"></i> Governorates</h4>
+      <span class="gov-count-badge" id="govCountBadge">0</span>
+    </div>
+    <div class="gov-list" id="govList"></div>
+  </div>
+
+  <!-- Right: Cities table -->
+  <div class="table-card cities-card">
+    <div class="cities-card-header">
+      <div class="cities-title-block">
+        <h4 class="cities-title" id="citiesTitle">All Cities</h4>
+        <span class="cities-sub" id="citiesSub">Select a governorate to filter</span>
+      </div>
+    </div>
+
+    <div class="table-loading" id="tableLoading" style="display:none">
+      <div class="loading-spinner"></div>
+      <span>Loading...</span>
+    </div>
+
+    <div class="table-scroll" id="tableWrap">
+      <table class="data-table" id="citiesTable">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>City Name</th>
+            <th>Governorate</th>
+            <th style="width:110px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="citiesBody"></tbody>
+      </table>
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display:none">
+      <div class="empty-icon"><i class="fas fa-city"></i></div>
+      <h3 class="empty-title">No cities found</h3>
+      <p class="empty-desc">Try a different governorate or add a new city.</p>
+      <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New City</button>
+    </div>
+
+    <div class="pagination" id="paginationWrap" style="display:none">
+      <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+      <span class="page-info" id="pageInfo">Page 1</span>
+      <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- Full-page loading -->
+<div class="table-card" id="fullLoading">
+  <div class="table-loading">
+    <div class="loading-spinner"></div>
+    <span>Loading locations from API...</span>
+  </div>
+</div>
+
+
+<!-- ── CREATE CITY MODAL ─────────────────────────────── -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New City</h3>
+        <p class="modal-subtitle">Add a city to a governorate</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-font"></i> City Name (English) <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createNameEn" placeholder="e.g. Damascus" autocomplete="off" />
+        <span class="form-field-error" id="createNameEnErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-font"></i> City Name (Arabic) <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createNameAr" placeholder="e.g. دمشق" autocomplete="off" dir="rtl" />
+        <span class="form-field-error" id="createNameArErr"></span>
+      </div>
+      <div class="form-field full-col">
+        <label class="form-label"><i class="fas fa-map"></i> Governorate <span class="req">*</span></label>
+        <select class="form-input" id="createGovernorateId">
+          <option value="">Select governorate...</option>
+        </select>
+        <span class="form-field-error" id="createGovernorateErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create City</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── EDIT CITY MODAL ───────────────────────────────── -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit City</h3>
+        <p class="modal-subtitle" id="editModalSub">Update city details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <input type="hidden" id="editCityId" />
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-font"></i> City Name (English) <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editNameEn" autocomplete="off" />
+        <span class="form-field-error" id="editNameEnErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-font"></i> City Name (Arabic) <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editNameAr" autocomplete="off" dir="rtl" />
+        <span class="form-field-error" id="editNameArErr"></span>
+      </div>
+      <div class="form-field full-col">
+        <label class="form-label"><i class="fas fa-map"></i> Governorate <span class="req">*</span></label>
+        <select class="form-input" id="editGovernorateId"></select>
+        <span class="form-field-error" id="editGovernorateErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allGovernorates   = [];
+let allCities         = [];
+let filteredCities    = [];
+let activeGovId       = null;   // null = show all
+let currentPage       = 1;
+const PAGE_SIZE       = 15;
+
+// ── Toast fallback ────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = function(message, type) {
+    const existing = document.getElementById('_locToast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = '_locToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1';
+    toast.style.cssText = `
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 20px;border-radius:14px;
+      background:${bg};color:#fff;font-size:13.5px;font-weight:600;
+      box-shadow:0 12px 36px rgba(0,0,0,.4);
+      animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);
+    `;
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle';
+    toast.innerHTML = `<i class="fas fa-${icon}"></i><span>${message}</span>`;
+    if (!document.getElementById('_toastKF')) {
+      const s = document.createElement('style');
+      s.id = '_toastKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity='0'; toast.style.transition='opacity .3s'; setTimeout(()=>toast.remove(),300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  document.getElementById('locationSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterGovernorate').addEventListener('change', e => {
+    const val = e.target.value;
+    setActiveGov(val ? parseInt(val) : null);
+  });
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load all data ─────────────────────────────────────
+async function loadAll() {
+  document.getElementById('fullLoading').style.display = 'block';
+  document.getElementById('locLayout').style.display   = 'none';
+  document.getElementById('kpiRow').style.display      = 'none';
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+
+  try {
+    const [govRes, cityRes] = await Promise.all([
+      fetch('/api/governorates/'),
+      fetch('/api/cities/')
+    ]);
+
+    const govData  = await govRes.json();
+    const cityData = await cityRes.json();
+
+    if (!govRes.ok)  throw new Error(govData.error  || 'Failed to load governorates');
+    if (!cityRes.ok) throw new Error(cityData.error || 'Failed to load cities');
+
+    allGovernorates = Array.isArray(govData.result)  ? govData.result  : Array.isArray(govData)  ? govData  : [];
+    allCities       = Array.isArray(cityData.result) ? cityData.result : Array.isArray(cityData) ? cityData : [];
+
+    populateGovernorateDropdowns();
+    renderGovPanel();
+    applyFilters();
+
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('locLayout').style.display = 'grid';
+    document.getElementById('fullLoading').style.display = 'none';
+    document.getElementById('apiBanner').style.display  = 'none';
+    updateKPIs();
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = err.message;
+    document.getElementById('fullLoading').style.display = 'none';
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Populate governorate dropdowns ────────────────────
+function populateGovernorateDropdowns() {
+  // Toolbar filter
+  const filterSel = document.getElementById('filterGovernorate');
+  filterSel.innerHTML = '<option value="">All Governorates</option>';
+  allGovernorates.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    filterSel.appendChild(opt);
+  });
+
+  // Create / Edit modal selects
+  ['createGovernorateId', 'editGovernorateId'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">Select governorate...</option>';
+    allGovernorates.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = g.name;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ── Render governorate panel ──────────────────────────
+function renderGovPanel() {
+  document.getElementById('govCountBadge').textContent = allGovernorates.length;
+
+  const list = document.getElementById('govList');
+  list.innerHTML = `
+    <div class="gov-item ${activeGovId === null ? 'active' : ''}" onclick="setActiveGov(null)">
+      <div class="gov-item-icon all"><i class="fas fa-globe"></i></div>
+      <div class="gov-item-info">
+        <span class="gov-item-name">All Governorates</span>
+        <span class="gov-item-count">${allCities.length} cities</span>
+      </div>
+      <div class="gov-item-arrow"><i class="fas fa-chevron-right"></i></div>
+    </div>
+  ` + allGovernorates.map(g => {
+    const count = allCities.filter(c => c.governorateId === g.id).length;
+    const isActive = activeGovId === g.id;
+    return `
+    <div class="gov-item ${isActive ? 'active' : ''}" onclick="setActiveGov(${g.id})">
+      <div class="gov-item-icon"><i class="fas fa-map-marker-alt"></i></div>
+      <div class="gov-item-info">
+        <span class="gov-item-name">${g.name}</span>
+        <span class="gov-item-count">${count} ${count === 1 ? 'city' : 'cities'}</span>
+      </div>
+      <div class="gov-item-arrow"><i class="fas fa-chevron-right"></i></div>
+    </div>`;
+  }).join('');
+}
+
+// ── Set active governorate ────────────────────────────
+function setActiveGov(govId) {
+  activeGovId = govId;
+  // Sync toolbar dropdown
+  document.getElementById('filterGovernorate').value = govId !== null ? String(govId) : '';
+  renderGovPanel();
+  applyFilters();
+
+  // Update title
+  if (govId === null) {
+    document.getElementById('citiesTitle').textContent = 'All Cities';
+    document.getElementById('citiesSub').textContent   = 'Showing all cities across every governorate';
+  } else {
+    const gov = allGovernorates.find(g => g.id === govId);
+    document.getElementById('citiesTitle').textContent = gov ? gov.name : 'Cities';
+    document.getElementById('citiesSub').textContent   = `Cities in ${gov ? gov.name : ''}`;
+  }
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q = document.getElementById('locationSearch').value.toLowerCase().trim();
+  filteredCities = allCities.filter(c => {
+    const govMatch  = activeGovId === null || c.governorateId === activeGovId;
+    const textMatch = !q || c.name.toLowerCase().includes(q) || (c.governorateName || '').toLowerCase().includes(q);
+    return govMatch && textMatch;
+  });
+  currentPage = 1;
+  renderTable();
+  updateKPIs();
+}
+
+// ── Render cities table ───────────────────────────────
+function renderTable() {
+  document.getElementById('tableLoading').style.display = 'none';
+
+  if (filteredCities.length === 0) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredCities.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('citiesBody').innerHTML = page.map((c, i) => {
+    const initial = c.name.charAt(0).toUpperCase();
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${c.id}</span></td>
+      <td>
+        <div class="city-cell">
+          <div class="city-avatar">${initial}</div>
+          <div class="city-info">
+            <span class="city-name">${c.name}</span>
+            <span class="city-sub">City #${c.id}</span>
+          </div>
+        </div>
+      </td>
+      <td>
+        <span class="gov-badge">
+          <i class="fas fa-map-marker-alt"></i> ${c.governorateName || '—'}
+        </span>
+      </td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn edit" title="Edit" onclick="openEditModalById(${c.id})">
+            <i class="fas fa-pen"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalPages = Math.ceil(filteredCities.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredCities.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const avg = allGovernorates.length
+    ? (allCities.length / allGovernorates.length).toFixed(1)
+    : 0;
+  document.getElementById('statGovs').textContent    = allGovernorates.length;
+  document.getElementById('statCities').textContent  = allCities.length;
+  document.getElementById('statShowing').textContent = filteredCities.length;
+  document.getElementById('statAvg').textContent     = avg;
+}
+
+// ── Create modal ──────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('createNameEn').value        = '';
+  document.getElementById('createNameAr').value        = '';
+  document.getElementById('createGovernorateId').value = activeGovId !== null ? String(activeGovId) : '';
+  ['createNameEnErr','createNameArErr','createGovernorateErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('createNameEn').focus(), 100);
+}
+
+async function submitCreate() {
+  const nameEn        = document.getElementById('createNameEn').value.trim();
+  const nameAr        = document.getElementById('createNameAr').value.trim();
+  const governorateId = document.getElementById('createGovernorateId').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(nameEn,        'createNameEnErr',      'English name is required');
+  req(nameAr,        'createNameArErr',      'Arabic name is required');
+  req(governorateId, 'createGovernorateErr', 'Please select a governorate');
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/cities/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        nameEn: nameEn,
+        nameAr: nameAr,
+        governorateId: parseInt(governorateId)
+        })
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast(`City "${nameEn}" created successfully`, 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create city.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────
+function openEditModalById(id) {
+  const c = allCities.find(x => x.id === id);
+  if (!c) return;
+
+  document.getElementById('editCityId').value          = c.id;
+  document.getElementById('editNameEn').value          = c.name || '';
+  document.getElementById('editNameAr').value          = '';        // API doesn't return nameAr; user must fill
+  document.getElementById('editGovernorateId').value   = c.governorateId || '';
+  document.getElementById('editModalSub').textContent  = `Editing: ${c.name}`;
+  ['editNameEnErr','editNameArErr','editGovernorateErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('editError').style.display   = 'none';
+  document.getElementById('editModal').style.display   = 'flex';
+  setTimeout(() => document.getElementById('editNameEn').focus(), 100);
+}
+
+async function submitEdit() {
+  const id            = parseInt(document.getElementById('editCityId').value);
+  const nameEn        = document.getElementById('editNameEn').value.trim();
+  const nameAr        = document.getElementById('editNameAr').value.trim();
+  const governorateId = document.getElementById('editGovernorateId').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(nameEn,        'editNameEnErr',      'English name is required');
+  req(nameAr,        'editNameArErr',      'Arabic name is required');
+  req(governorateId, 'editGovernorateErr', 'Please select a governorate');
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/cities/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ id, nameEn, nameAr, governorateId: parseInt(governorateId) }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast(`City "${nameEn}" updated successfully`, 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update city.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled              = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

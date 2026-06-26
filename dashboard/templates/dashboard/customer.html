@@ -1,0 +1,785 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Customers — Bus Station{% endblock %}
+{% block breadcrumb %}Analytics / Customers{% endblock %}
+{% block page_title %}Customer Management{% endblock %}
+{% block nav_customers %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/customers.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="customerSearch" placeholder="Search by name or phone..." />
+    </div>
+    <select class="filter-select" id="filterGender">
+      <option value="">All Genders</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadCustomers()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-user-plus"></i> New Customer
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPI Stats -->
+<div class="customer-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#3b82f6">
+    <div class="kpi-icon"><i class="fas fa-users"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Customers</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-line"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-mars"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statMale">0</span>
+      <span class="kpi-label">Male</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-bar"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#ec4899">
+    <div class="kpi-icon"><i class="fas fa-venus"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statFemale">0</span>
+      <span class="kpi-label">Female</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-bar"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#f59e0b">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-card">
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading customers from API...</span>
+  </div>
+
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table" id="customersTable">
+      <thead>
+        <tr>
+          <th style="width:60px">ID</th>
+          <th>Customer</th>
+          <th>Phone</th>
+          <th>Gender</th>
+          <th>Date of Birth</th>
+          <th>Age</th>
+          <th style="width:130px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="customersBody"></tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-users"></i></div>
+    <h3 class="empty-title">No customers found</h3>
+    <p class="empty-desc">Try adjusting your search or add your first customer.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-user-plus"></i> New Customer</button>
+  </div>
+
+  <div class="pagination" id="paginationWrap" style="display:none">
+    <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+
+<!-- ── VIEW MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-user-circle"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewModalName">Customer Details</h3>
+        <p class="modal-subtitle" id="viewModalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="customer-profile-header" id="viewProfileHeader">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+      <div class="info-rows" id="viewInfoRows"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-primary" id="viewEditBtn"><i class="fas fa-pen"></i> Edit</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── CREATE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-user-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Customer</h3>
+        <p class="modal-subtitle">Register a new customer account</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> First Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createFirstName" placeholder="e.g. Ahmad" autocomplete="off" />
+        <span class="form-field-error" id="createFirstNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> Last Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createLastName" placeholder="e.g. Al-Hassan" autocomplete="off" />
+        <span class="form-field-error" id="createLastNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-phone"></i> Phone Number <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createPhone" placeholder="e.g. 0912345678" autocomplete="off" />
+        <span class="form-field-error" id="createPhoneErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-venus-mars"></i> Gender <span class="req">*</span></label>
+        <select class="form-input" id="createGenderId">
+          <option value="">Select gender...</option>
+        </select>
+        <span class="form-field-error" id="createGenderErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-calendar"></i> Date of Birth <span class="req">*</span></label>
+        <input type="date" class="form-input" id="createDob" />
+        <span class="form-field-error" id="createDobErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-lock"></i> Password <span class="req">*</span></label>
+        <div class="password-wrap">
+          <input type="password" class="form-input" id="createPassword" placeholder="Enter password" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" onclick="togglePw('createPassword','createPwIcon')">
+            <i class="fas fa-eye" id="createPwIcon"></i>
+          </button>
+        </div>
+        <span class="form-field-error" id="createPasswordErr"></span>
+      </div>
+      <div class="form-field full-col">
+        <label class="form-label"><i class="fas fa-lock"></i> Confirm Password <span class="req">*</span></label>
+        <div class="password-wrap">
+          <input type="password" class="form-input" id="createConfirmPassword" placeholder="Repeat password" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" onclick="togglePw('createConfirmPassword','createCPwIcon')">
+            <i class="fas fa-eye" id="createCPwIcon"></i>
+          </button>
+        </div>
+        <span class="form-field-error" id="createConfirmPasswordErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-user-plus"></i> Create Customer</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── EDIT MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-user-edit"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Customer</h3>
+        <p class="modal-subtitle" id="editModalSub">Update customer details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <input type="hidden" id="editCustomerId" />
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> First Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editFirstName" autocomplete="off" />
+        <span class="form-field-error" id="editFirstNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> Last Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editLastName" autocomplete="off" />
+        <span class="form-field-error" id="editLastNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-phone"></i> Phone Number <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editPhone" autocomplete="off" />
+        <span class="form-field-error" id="editPhoneErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-venus-mars"></i> Gender <span class="req">*</span></label>
+        <select class="form-input" id="editGenderId"></select>
+        <span class="form-field-error" id="editGenderErr"></span>
+      </div>
+      <div class="form-field full-col">
+        <label class="form-label"><i class="fas fa-calendar"></i> Date of Birth <span class="req">*</span></label>
+        <input type="date" class="form-input" id="editDob" />
+        <span class="form-field-error" id="editDobErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── DELETE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-user-times"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Customer?</h3>
+        <p class="modal-subtitle" id="deleteModalSub">This action cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-body">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete <strong id="deleteCustomerName">—</strong>.
+           Please enter the account password to confirm.</p>
+      </div>
+      <input type="hidden" id="deleteCustomerId" />
+      <div class="form-field" style="margin-top:1rem">
+        <label class="form-label"><i class="fas fa-lock"></i> Account Password <span class="req">*</span></label>
+        <div class="password-wrap">
+          <input type="password" class="form-input" id="deletePassword" placeholder="Enter account password" />
+          <button type="button" class="pw-toggle" onclick="togglePw('deletePassword','deletePwIcon')">
+            <i class="fas fa-eye" id="deletePwIcon"></i>
+          </button>
+        </div>
+        <span class="form-field-error" id="deletePasswordErr"></span>
+      </div>
+      <div class="modal-error" id="deleteError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="deleteErrorMsg"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" onclick="submitDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete Customer</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allCustomers      = [];
+let filteredCustomers = [];
+let allGenders        = [];
+let currentPage       = 1;
+const PAGE_SIZE       = 15;
+let pendingDeleteId   = null;
+
+// ── Toast fallback (if base.html doesn't define showToast) ────
+if (typeof showToast === 'undefined') {
+  window.showToast = function(message, type) {
+    // Create a simple toast if the base doesn't have one
+    const existing = document.getElementById('_custToast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = '_custToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+    toast.style.cssText = `
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 20px;border-radius:14px;
+      background:${bg};color:#fff;font-size:13.5px;font-weight:600;
+      box-shadow:0 12px 36px rgba(0,0,0,.4);
+      animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);
+    `;
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'trash' : 'info-circle';
+    toast.innerHTML = `<i class="fas fa-${icon}"></i><span>${message}</span>`;
+    if (!document.getElementById('_toastKeyframes')) {
+      const s = document.createElement('style');
+      s.id = '_toastKeyframes';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity='0'; toast.style.transition='opacity .3s'; setTimeout(()=>toast.remove(),300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadGenders().then(() => loadCustomers());
+  document.getElementById('customerSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterGender').addEventListener('change', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load genders ──────────────────────────────────────
+async function loadGenders() {
+  try {
+    const res  = await fetch('/api/genders/');
+    const data = await res.json();
+    allGenders = Array.isArray(data) ? data
+               : Array.isArray(data.result) ? data.result : [];
+
+    const filterSel = document.getElementById('filterGender');
+    filterSel.innerHTML = '<option value="">All Genders</option>';
+    allGenders.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = g.nameEn || g.name;
+      filterSel.appendChild(opt);
+    });
+
+    ['createGenderId','editGenderId'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">Select gender...</option>';
+      allGenders.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.nameEn || g.name;
+        sel.appendChild(opt);
+      });
+    });
+  } catch (err) { console.error('Genders failed:', err); }
+}
+
+// ── Load customers ────────────────────────────────────
+async function loadCustomers() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const res  = await fetch('/api/customers/');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    allCustomers = Array.isArray(data.result) ? data.result
+                 : Array.isArray(data) ? data : [];
+    applyFilters();
+    document.getElementById('kpiRow').style.display  = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load customers: ' + err.message;
+    setTableLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q  = document.getElementById('customerSearch').value.toLowerCase().trim();
+  const gf = document.getElementById('filterGender').value;
+  filteredCustomers = allCustomers.filter(c => {
+    const text = `${c.firstName} ${c.lastName} ${c.phoneNumber}`.toLowerCase();
+    const genderMatch = !gf || String(c.gender?.id) === gf;
+    return (!q || text.includes(q)) && genderMatch;
+  });
+  currentPage = 1;
+  renderTable();
+  updateKPIs();
+}
+
+// ── Render table ──────────────────────────────────────
+function renderTable() {
+  setTableLoading(false);
+  if (filteredCustomers.length === 0) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredCustomers.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('customersBody').innerHTML = page.map((c, i) => {
+    const full    = `${c.firstName || ''} ${c.lastName || ''}`.trim() || '—';
+    const initial = full.charAt(0).toUpperCase();
+    const gender  = c.gender?.nameEn || c.gender?.name || '—';
+    const gClass  = gender.toLowerCase() === 'male' ? 'male' : 'female';
+    const dob     = c.dob ? c.dob.substring(0,10) : '—';
+    const age     = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / 3.156e10) : '—';
+    // Safe JSON for inline onclick — avoids quote issues
+    const cJson   = JSON.stringify(c).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${c.id}</span></td>
+      <td>
+        <div class="customer-cell">
+          <div class="cust-avatar ${gClass}">${initial}</div>
+          <div class="cust-info">
+            <span class="cust-name">${full}</span>
+            <span class="cust-sub">Customer #${c.id}</span>
+          </div>
+        </div>
+      </td>
+      <td><span class="phone-tag"><i class="fas fa-phone"></i> ${c.phoneNumber || '—'}</span></td>
+      <td><span class="gender-badge ${gClass}"><i class="fas fa-${gClass === 'male' ? 'mars' : 'venus'}"></i> ${gender}</span></td>
+      <td><span class="date-text">${dob}</span></td>
+      <td><span class="age-tag">${age} yrs</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view" title="View" onclick="openViewModal(${c.id})">
+            <i class="fas fa-eye"></i></button>
+          <button class="action-btn edit" title="Edit" onclick="openEditModalById(${c.id})">
+            <i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${c.id}, '${full.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
+            <i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalPages = Math.ceil(filteredCustomers.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredCustomers.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const male   = allCustomers.filter(c => (c.gender?.nameEn || c.gender?.name || '').toLowerCase() === 'male').length;
+  const female = allCustomers.filter(c => (c.gender?.nameEn || c.gender?.name || '').toLowerCase() === 'female').length;
+  document.getElementById('statTotal').textContent   = allCustomers.length;
+  document.getElementById('statMale').textContent    = male;
+  document.getElementById('statFemale').textContent  = female;
+  document.getElementById('statShowing').textContent = filteredCustomers.length;
+}
+
+// ── View modal ────────────────────────────────────────
+async function openViewModal(customerId) {
+  document.getElementById('viewModal').style.display  = 'flex';
+  document.getElementById('viewModalName').textContent = 'Loading...';
+  document.getElementById('viewModalSub').textContent  = `Customer #${customerId}`;
+  document.getElementById('viewProfileHeader').innerHTML = '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+  document.getElementById('viewInfoRows').innerHTML = '';
+
+  try {
+    const res  = await fetch(`/api/customer/?customerId=${customerId}`);
+    const data = await res.json();
+    const c    = data.result || data;
+
+    const full   = `${c.firstName || ''} ${c.lastName || ''}`.trim();
+    const gender = c.gender?.nameEn || c.gender?.name || '—';
+    const gClass = gender.toLowerCase() === 'male' ? 'male' : 'female';
+    const dob    = c.dob ? c.dob.substring(0,10) : '—';
+    const age    = c.dob ? Math.floor((Date.now() - new Date(c.dob)) / 3.156e10) : '—';
+
+    document.getElementById('viewModalName').textContent = full;
+
+    document.getElementById('viewProfileHeader').innerHTML = `
+      <div class="profile-avatar-lg ${gClass}">${full.charAt(0).toUpperCase()}</div>
+      <div class="profile-name-block">
+        <h4 class="profile-full-name">${full}</h4>
+        <span class="gender-badge ${gClass}">
+          <i class="fas fa-${gClass === 'male' ? 'mars' : 'venus'}"></i> ${gender}
+        </span>
+      </div>`;
+
+    document.getElementById('viewInfoRows').innerHTML = `
+      <div class="info-row"><span class="info-label"><i class="fas fa-hashtag"></i> Customer ID</span><span class="info-value"><span class="id-badge">#${customerId}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-user"></i> Full Name</span><span class="info-value">${full}</span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-phone"></i> Phone</span><span class="info-value"><span class="phone-tag"><i class="fas fa-phone"></i> ${c.phoneNumber || '—'}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-venus-mars"></i> Gender</span><span class="info-value"><span class="gender-badge ${gClass}">${gender}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-calendar"></i> Date of Birth</span><span class="info-value">${dob}</span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-birthday-cake"></i> Age</span><span class="info-value"><span class="age-tag">${age} yrs old</span></span></div>`;
+
+    document.getElementById('viewEditBtn').onclick = () => {
+      closeModal('viewModal');
+      openEditModal({ id: customerId, firstName: c.firstName, lastName: c.lastName,
+        phoneNumber: c.phoneNumber, gender: c.gender, dob: c.dob });
+    };
+  } catch (err) {
+    document.getElementById('viewProfileHeader').innerHTML = '';
+    document.getElementById('viewInfoRows').innerHTML = `<p style="color:var(--red,#f87171);padding:1rem;text-align:center">Failed to load customer details.</p>`;
+  }
+}
+
+// ── Create modal ──────────────────────────────────────
+function openCreateModal() {
+  ['createFirstName','createLastName','createPhone','createPassword','createConfirmPassword']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('createGenderId').value = '';
+  document.getElementById('createDob').value = '';
+  ['createFirstNameErr','createLastNameErr','createPhoneErr','createGenderErr','createDobErr','createPasswordErr','createConfirmPasswordErr']
+    .forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('createFirstName').focus(), 100);
+}
+
+async function submitCreate() {
+  const firstName       = document.getElementById('createFirstName').value.trim();
+  const lastName        = document.getElementById('createLastName').value.trim();
+  const phoneNumber     = document.getElementById('createPhone').value.trim();
+  const genderId        = document.getElementById('createGenderId').value;
+  const dob             = document.getElementById('createDob').value;
+  const password        = document.getElementById('createPassword').value;
+  const confirmPassword = document.getElementById('createConfirmPassword').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(firstName,       'createFirstNameErr',       'First name is required');
+  req(lastName,        'createLastNameErr',         'Last name is required');
+  req(phoneNumber,     'createPhoneErr',            'Phone number is required');
+  req(genderId,        'createGenderErr',           'Please select a gender');
+  req(dob,             'createDobErr',              'Date of birth is required');
+  req(password,        'createPasswordErr',         'Password is required');
+  req(confirmPassword, 'createConfirmPasswordErr',  'Please confirm password');
+  if (password && confirmPassword && password !== confirmPassword) {
+    document.getElementById('createConfirmPasswordErr').textContent = 'Passwords do not match';
+    valid = false;
+  }
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/customers/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ firstName, lastName, phoneNumber, genderId: parseInt(genderId), dob, password, confirmPassword }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast(`Customer "${firstName} ${lastName}" created successfully`, 'success');
+      loadCustomers();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create customer.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────
+// Open edit by customer object (from view modal)
+function openEditModal(c) {
+  document.getElementById('editCustomerId').value = c.id;
+  document.getElementById('editFirstName').value  = c.firstName || '';
+  document.getElementById('editLastName').value   = c.lastName  || '';
+  document.getElementById('editPhone').value      = c.phoneNumber || '';
+  document.getElementById('editGenderId').value   = c.gender?.id || '';
+  document.getElementById('editDob').value        = c.dob ? c.dob.substring(0,10) : '';
+  document.getElementById('editModalSub').textContent = `Editing: ${c.firstName} ${c.lastName}`;
+  ['editFirstNameErr','editLastNameErr','editPhoneErr','editGenderErr','editDobErr']
+    .forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('editFirstName').focus(), 100);
+}
+
+// Open edit by ID — finds from allCustomers array (avoids inline JSON injection)
+function openEditModalById(id) {
+  const c = allCustomers.find(x => x.id === id);
+  if (c) openEditModal(c);
+}
+
+async function submitEdit() {
+  const id          = parseInt(document.getElementById('editCustomerId').value);
+  const firstName   = document.getElementById('editFirstName').value.trim();
+  const lastName    = document.getElementById('editLastName').value.trim();
+  const phoneNumber = document.getElementById('editPhone').value.trim();
+  const genderId    = document.getElementById('editGenderId').value;
+  const dob         = document.getElementById('editDob').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(firstName,   'editFirstNameErr', 'First name is required');
+  req(lastName,    'editLastNameErr',  'Last name is required');
+  req(phoneNumber, 'editPhoneErr',     'Phone number is required');
+  req(genderId,    'editGenderErr',    'Please select a gender');
+  req(dob,         'editDobErr',       'Date of birth is required');
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/customers/edit/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ id, firstName, lastName, phoneNumber, genderId: parseInt(genderId), dob }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast(`Customer "${firstName} ${lastName}" updated successfully`, 'success');
+      loadCustomers();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update customer.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── Delete modal ──────────────────────────────────────
+function openDeleteModal(customerId, name) {
+  pendingDeleteId = customerId;
+  document.getElementById('deleteCustomerId').value        = customerId;
+  document.getElementById('deleteCustomerName').textContent = name;
+  document.getElementById('deleteModalSub').textContent    = `Customer #${customerId}`;
+  document.getElementById('deletePassword').value          = '';
+  document.getElementById('deletePasswordErr').textContent = '';
+  document.getElementById('deleteError').style.display     = 'none';
+  document.getElementById('deleteModal').style.display     = 'flex';
+  setTimeout(() => document.getElementById('deletePassword').focus(), 100);
+}
+
+async function submitDelete() {
+  const customerId = parseInt(document.getElementById('deleteCustomerId').value);
+  const password   = document.getElementById('deletePassword').value;
+  if (!password) {
+    document.getElementById('deletePasswordErr').textContent = 'Password is required to confirm deletion';
+    return;
+  }
+  document.getElementById('deletePasswordErr').textContent = '';
+  document.getElementById('deleteError').style.display = 'none';
+
+  setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+
+  try {
+    const res  = await fetch('/api/customers/delete/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ customerId, password }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast('Customer deleted successfully', 'error');
+      allCustomers      = allCustomers.filter(c => c.id !== customerId);
+      filteredCustomers = filteredCustomers.filter(c => c.id !== customerId);
+      renderTable();
+      updateKPIs();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete. Wrong password?';
+      document.getElementById('deleteError').style.display  = 'flex';
+      document.getElementById('deleteErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('deleteError').style.display  = 'flex';
+    document.getElementById('deleteErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setTableLoading(loading) {
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled              = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function togglePw(inputId, iconId) {
+  const inp = document.getElementById(inputId);
+  const ico = document.getElementById(iconId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  ico.className = inp.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

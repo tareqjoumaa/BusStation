@@ -1,0 +1,411 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Add Bus — Bus Station{% endblock %}
+{% block breadcrumb %}Fleet / Add Bus{% endblock %}
+{% block page_title %}Add New Bus{% endblock %}
+{% block nav_buses %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/buses.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<div class="create-page-header">
+  <a href="{% url 'dashboard:buses' %}" class="back-btn">
+    <i class="fas fa-arrow-left"></i> Back to Fleet
+  </a>
+</div>
+
+<div class="create-layout">
+
+  <!-- Left: Form -->
+  <div class="create-form-col">
+    <div class="create-form-card">
+
+      <div class="create-form-header">
+        <div class="cfh-icon"><i class="fas fa-bus"></i></div>
+        <div>
+          <h2 class="cfh-title">New Bus</h2>
+          <p class="cfh-sub">Fill in the details to register a new bus</p>
+        </div>
+      </div>
+
+      <!-- API error -->
+      <div class="form-api-error" id="formError" style="display:none">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="formErrorMsg"></span>
+      </div>
+
+      <!-- Step 1: Bus Info -->
+      <div class="form-section">
+        <div class="form-section-label">
+          <span class="fs-num">1</span> Bus Information
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">
+            <i class="fas fa-tag"></i> Bus Name <span class="req">*</span>
+          </label>
+          <input
+            type="text"
+            class="form-input"
+            id="busName"
+            placeholder="e.g. Mercedes Sprinter, MAN Lion's Coach..."
+            autocomplete="off"
+          />
+          <span class="field-hint">Give the bus a recognizable name</span>
+          <span class="form-field-error" id="busNameErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">
+            <i class="fas fa-building"></i> Company Office <span class="req">*</span>
+          </label>
+          <div class="select-wrap" id="officeSelectWrap">
+            <div class="select-loading" id="officeLoading">
+              <div class="loading-spinner sm"></div> Loading offices...
+            </div>
+            <select class="form-input" id="officeSelect" style="display:none">
+              <option value="">Choose an office...</option>
+            </select>
+          </div>
+          <span class="field-hint" id="officeHint"></span>
+          <span class="form-field-error" id="officeErr"></span>
+        </div>
+      </div>
+
+      <!-- Step 2: Seats -->
+      <div class="form-section">
+        <div class="form-section-label">
+          <span class="fs-num">2</span> Seat Configuration
+        </div>
+
+        <div class="seats-builder">
+          <div class="sb-controls">
+            <div class="form-field" style="flex:1">
+              <label class="form-label">
+                <i class="fas fa-chair"></i> Quick Add — Number of Seats
+              </label>
+              <div class="seat-quick-row">
+                <input
+                  type="number"
+                  class="form-input"
+                  id="seatCount"
+                  placeholder="e.g. 52"
+                  min="1" max="200"
+                  style="flex:1"
+                />
+                <button class="btn-secondary" type="button" onclick="generateSeats()">
+                  <i class="fas fa-magic"></i> Generate
+                </button>
+              </div>
+              <span class="field-hint">Auto-generates seat numbers 1, 2, 3...</span>
+            </div>
+          </div>
+
+          <!-- Seats preview -->
+          <div class="seats-preview-wrap" id="seatsPreviewWrap" style="display:none">
+            <div class="seats-preview-header">
+              <span id="seatsPreviewCount">0 seats configured</span>
+              <button class="seats-clear-btn" type="button" onclick="clearSeats()">
+                <i class="fas fa-times"></i> Clear all
+              </button>
+            </div>
+            <div class="seats-grid-preview" id="seatsGrid"></div>
+          </div>
+
+
+          <span class="form-field-error" id="seatsErr"></span>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="form-submit-row">
+        <a href="{% url 'dashboard:buses' %}" class="btn-secondary">
+          <i class="fas fa-times"></i> Cancel
+        </a>
+        <button class="btn-primary" id="submitBtn" onclick="submitBus()">
+          <span id="submitLabel"><i class="fas fa-bus"></i> Register Bus</span>
+          <span id="submitLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Right: Live preview -->
+  <div class="create-preview-col">
+    <div class="preview-card">
+      <div class="preview-card-header">
+        <i class="fas fa-eye"></i> Live Preview
+      </div>
+
+      <div class="preview-bus-visual">
+        <div class="preview-bus-icon"><i class="fas fa-bus"></i></div>
+        <div class="preview-bus-info">
+          <span class="preview-bus-name" id="previewName">New Bus</span>
+          <span class="preview-bus-office" id="previewOffice">No office selected</span>
+        </div>
+        <div class="preview-status-dot active"></div>
+      </div>
+
+      <div class="preview-stats">
+        <div class="preview-stat">
+          <span class="ps-val" id="previewSeats">0</span>
+          <span class="ps-label">Seats</span>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-stat">
+          <span class="ps-val" id="previewOfficeId">—</span>
+          <span class="ps-label">Office ID</span>
+        </div>
+        <div class="preview-divider"></div>
+        <div class="preview-stat">
+          <span class="ps-val">Active</span>
+          <span class="ps-label">Status</span>
+        </div>
+      </div>
+
+
+      <div class="preview-tips">
+        <div class="tip-item">
+          <i class="fas fa-lightbulb"></i>
+          <span>Use numbered seats like 1-52 for standard buses</span>
+        </div>
+        <div class="tip-item">
+          <i class="fas fa-lightbulb"></i>
+          <span>VIP seats can use labels like VIP-1, VIP-2</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Success Modal -->
+<div class="modal-overlay" id="successModal" style="display:none">
+  <div class="modal-box">
+    <div class="success-modal-inner">
+      <div class="success-icon-wrap">
+        <div class="success-ring"></div>
+        <i class="fas fa-check success-check"></i>
+      </div>
+      <h3 class="success-title">Bus Registered!</h3>
+      <p class="success-desc" id="successDesc">The bus has been added to your fleet.</p>
+      <div class="success-actions">
+        <a href="{% url 'dashboard:buses' %}" class="btn-secondary">
+          <i class="fas fa-list"></i> View Fleet
+        </a>
+        <button class="btn-primary" onclick="resetForm()">
+          <i class="fas fa-plus"></i> Add Another
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/dashboard/api';
+const TOKEN    = '{{ token }}';
+const AUTH     = { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'Accept': 'application/json' };
+
+let seats   = [];   // [{ busId: 0, seatNumber: "1" }, ...]
+let offices = [];   // from GetAllBusCompanyOffices
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadOffices();
+
+  // Live preview updates
+  document.getElementById('busName').addEventListener('input', updatePreview);
+  document.getElementById('officeSelect').addEventListener('change', updatePreview);
+
+});
+
+// ── Load offices ──────────────────────────────────────
+async function loadOffices() {
+  try {
+    const res  = await fetch('/api/offices/', { headers: AUTH });
+    const data = await res.json();
+    offices    = data.result || data.data || data || [];
+
+    const sel = document.getElementById('officeSelect');
+    offices.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value       = o.id;
+      opt.textContent = `${o.name}${o.busCompanyName ? ' — ' + o.busCompanyName : ''}${o.cityName ? ' (' + o.cityName + ')' : ''}`;
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('officeLoading').style.display = 'none';
+    sel.style.display = 'block';
+
+  } catch(err) {
+    document.getElementById('officeLoading').innerHTML =
+      '<span style="color:var(--red)"><i class="fas fa-exclamation-circle"></i> Failed to load offices</span>';
+  }
+}
+
+// ── Seat generation ───────────────────────────────────
+function generateSeats() {
+  const n = parseInt(document.getElementById('seatCount').value, 10);
+  if (!n || n < 1 || n > 200) {
+    document.getElementById('seatsErr').textContent = 'Enter a number between 1 and 200';
+    return;
+  }
+  document.getElementById('seatsErr').textContent = '';
+  seats = Array.from({ length: n }, (_, i) => ({ busId: 0, seatNumber: String(i + 1) }));
+  renderSeats();
+  updatePreview();
+}
+
+function addManualSeat() {
+  const input = document.getElementById('manualSeatInput');
+  const val   = input.value.trim();
+  if (!val) return;
+  if (seats.some(s => s.seatNumber === val)) {
+    document.getElementById('seatsErr').textContent = `Seat "${val}" already exists`;
+    return;
+  }
+  document.getElementById('seatsErr').textContent = '';
+  seats.push({ busId: 0, seatNumber: val });
+  input.value = '';
+  renderSeats();
+  updatePreview();
+}
+
+function removeSeat(seatNumber) {
+  seats = seats.filter(s => s.seatNumber !== seatNumber);
+  renderSeats();
+  updatePreview();
+}
+
+function clearSeats() {
+  seats = [];
+  renderSeats();
+  updatePreview();
+}
+
+function renderSeats() {
+  const wrap = document.getElementById('seatsPreviewWrap');
+  const grid = document.getElementById('seatsGrid');
+
+  if (seats.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  document.getElementById('seatsPreviewCount').textContent = `${seats.length} seat${seats.length !== 1 ? 's' : ''} configured`;
+  grid.innerHTML = seats.map(s => `
+    <div class="seat-chip-builder">
+      <span>${s.seatNumber}</span>
+      <button onclick="removeSeat('${s.seatNumber}')" title="Remove"><i class="fas fa-times"></i></button>
+    </div>`).join('');
+}
+
+// ── Live preview ──────────────────────────────────────
+function updatePreview() {
+  const name     = document.getElementById('busName').value || 'New Bus';
+  const officeEl = document.getElementById('officeSelect');
+  const officeId = officeEl.value;
+  const officeText = officeId
+    ? (officeEl.options[officeEl.selectedIndex]?.text || `Office #${officeId}`)
+    : 'No office selected';
+
+  document.getElementById('previewName').textContent    = name;
+  document.getElementById('previewOffice').textContent  = officeText;
+  document.getElementById('previewSeats').textContent   = seats.length;
+  document.getElementById('previewOfficeId').textContent = officeId || '—';
+
+  // JSON payload preview
+  const payload = {
+    busCompanyOfficeId: officeId ? parseInt(officeId) : '—',
+    name: name || '—',
+    seats: seats.slice(0, 3).map(s => ({ busId: 0, seatNumber: s.seatNumber }))
+      .concat(seats.length > 3 ? [{ '...': `+${seats.length - 3} more` }] : [])
+  };
+  document.getElementById('payloadJson').textContent = JSON.stringify(payload, null, 2);
+}
+
+// ── Submit ────────────────────────────────────────────
+async function submitBus() {
+  const name     = document.getElementById('busName').value.trim();
+  const officeId = document.getElementById('officeSelect').value;
+
+  // Validate
+  let valid = true;
+  if (!name) {
+    document.getElementById('busNameErr').textContent = 'Bus name is required';
+    document.getElementById('busName').classList.add('input-error');
+    valid = false;
+  } else {
+    document.getElementById('busNameErr').textContent = '';
+    document.getElementById('busName').classList.remove('input-error');
+  }
+  if (!officeId) {
+    document.getElementById('officeErr').textContent = 'Please select an office';
+    valid = false;
+  } else {
+    document.getElementById('officeErr').textContent = '';
+  }
+  if (!valid) return;
+
+  // Loading state
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('submitLabel').style.display  = 'none';
+  document.getElementById('submitLoading').style.display = 'inline-flex';
+  document.getElementById('formError').style.display = 'none';
+
+  const payload = {
+    busCompanyOfficeId: parseInt(officeId),
+    name,
+    seats: seats.map(s => ({ busId: 0, seatNumber: s.seatNumber })),
+  };
+
+  try {
+    const res = await fetch('/api/buses/create/', {
+      method: 'POST',
+      headers: {
+        ...AUTH
+      },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin'
+    });
+    const data = await res.json();
+
+    if ((res.ok || res.status === 200) && !data.hasErrors) {
+      document.getElementById('successDesc').textContent =
+        `"${name}" with ${seats.length} seat${seats.length !== 1 ? 's' : ''} has been added to the fleet.`;
+      document.getElementById('successModal').style.display = 'flex';
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.message || 'Failed to create bus.';
+      document.getElementById('formError').style.display = 'flex';
+      document.getElementById('formErrorMsg').textContent = msg;
+    }
+  } catch(err) {
+    document.getElementById('formError').style.display = 'flex';
+    document.getElementById('formErrorMsg').textContent = 'Network error. Please check your connection.';
+  } finally {
+    document.getElementById('submitBtn').disabled = false;
+    document.getElementById('submitLabel').style.display  = 'inline-flex';
+    document.getElementById('submitLoading').style.display = 'none';
+  }
+}
+
+// ── Reset form ────────────────────────────────────────
+function resetForm() {
+  document.getElementById('successModal').style.display = 'none';
+  document.getElementById('busName').value  = '';
+  document.getElementById('officeSelect').value = '';
+  document.getElementById('seatCount').value = '';
+  seats = [];
+  renderSeats();
+  updatePreview();
+}
+</script>
+{% endblock %}

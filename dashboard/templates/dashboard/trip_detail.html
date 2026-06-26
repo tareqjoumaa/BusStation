@@ -1,0 +1,578 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Trip #{{ trip_id }} — Bus Station{% endblock %}
+{% block breadcrumb %}My Trips / Trip #{{ trip_id }}{% endblock %}
+{% block page_title %}Trip Detail{% endblock %}
+{% block nav_trip_instances %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/trip_detail.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Back -->
+<a href="javascript:history.back()" class="back-btn">
+  <i class="fas fa-arrow-left"></i> Back to Trips
+</a>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+</div>
+
+<!-- Page loading -->
+<div class="page-loading" id="pageLoading">
+  <div class="loading-spinner"></div>
+  <span style="color:var(--text-mute);font-size:13px">Loading trip details...</span>
+</div>
+
+<!-- Main content (hidden until loaded) -->
+<div id="pageContent" style="display:none">
+
+  <!-- Trip hero card -->
+  <div class="trip-hero" id="tripHero"></div>
+
+  <!-- Two-column layout -->
+  <div class="detail-grid">
+
+    <!-- LEFT — seat stats + bus seat map -->
+    <div>
+      <!-- Seat stats -->
+      <div class="seat-stats" id="seatStats"></div>
+
+      <!-- Bus shape -->
+      <div class="detail-card">
+        <div class="detail-card-header">
+          <div class="detail-card-icon rose"><i class="fas fa-bus"></i></div>
+          <div>
+            <div class="detail-card-title">Bus Seat Map</div>
+            <div class="detail-card-sub" id="busSubLabel">Hover a seat for details</div>
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+            <div class="loading-spinner sm" id="seatSpinner"></div>
+          </div>
+        </div>
+        <div class="detail-card-body" style="display:flex;justify-content:center">
+          <div class="bus-wrap">
+            <div class="bus-shell" id="busShell">
+              <!-- Built by JS -->
+            </div>
+            <!-- Legend -->
+            <div class="seat-legend">
+              <div class="legend-item">
+                <span class="legend-swatch avail"></span> Available
+              </div>
+              <div class="legend-item">
+                <span class="legend-swatch resv"></span> Reserved
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — info + assign driver -->
+    <div style="display:flex;flex-direction:column;gap:1.2rem">
+
+      <!-- Trip info -->
+      <div class="detail-card">
+        <div class="detail-card-header">
+          <div class="detail-card-icon rose"><i class="fas fa-info-circle"></i></div>
+          <div>
+            <div class="detail-card-title">Trip Information</div>
+            <div class="detail-card-sub">Full trip details</div>
+          </div>
+        </div>
+        <div class="detail-card-body">
+          <div class="info-rows" id="tripInfoRows">
+            <div class="page-loading" style="padding:2rem">
+              <div class="loading-spinner sm"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assign driver -->
+      <div class="detail-card">
+        <div class="detail-card-header">
+          <div class="detail-card-icon indigo"><i class="fas fa-id-badge"></i></div>
+          <div>
+            <div class="detail-card-title">Assign Driver</div>
+            <div class="detail-card-sub">Change or assign a driver</div>
+          </div>
+        </div>
+        <div class="detail-card-body">
+          <div class="assign-panel">
+            <!-- Current driver display -->
+            <div id="currentDriverWrap"></div>
+
+            <div class="form-field">
+              <label class="form-label"><i class="fas fa-user"></i> Select Driver</label>
+              <select class="form-input" id="driverSelect">
+                <option value="">Loading drivers...</option>
+              </select>
+            </div>
+
+            <div id="assignError" style="display:none;color:#f87171;font-size:12px;padding:6px 0"></div>
+
+            <button class="btn-primary" id="assignBtn" onclick="submitAssignDriver()">
+              <span id="assignBtnLabel"><i class="fas fa-check"></i> Assign Driver</span>
+              <span id="assignBtnLoading" style="display:none"><span class="btn-spinner"></span> Assigning...</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Seat tooltip -->
+<div class="seat-tooltip" id="seatTooltip">
+  <div class="st-seat" id="ttSeat"></div>
+  <div class="st-status">
+    <span class="st-dot" id="ttDot"></span>
+    <span id="ttStatus"></span>
+  </div>
+  <div id="ttExtra" style="margin-top:5px;font-size:11px;color:rgba(255,255,255,.5)"></div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TRIP_ID = {{ trip_id }};
+let tripData  = null;
+let seatsData = null;
+let drivers   = [];
+
+// ── Toast ─────────────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = (msg, type) => {
+    const e = document.getElementById('_tdToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_tdToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f43f5e';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s ease;`;
+    t.innerHTML = `<i class="fas fa-${type==='success'?'check-circle':'info-circle'}"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF2')) {
+      const s = document.createElement('style'); s.id='_tKF2';
+      s.textContent='@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadPage();
+  // Tooltip follows mouse
+  document.addEventListener('mousemove', e => {
+    const tt = document.getElementById('seatTooltip');
+    if (tt.classList.contains('visible')) {
+      tt.style.left = (e.clientX + 14) + 'px';
+      tt.style.top  = (e.clientY - 10) + 'px';
+    }
+  });
+});
+
+async function loadPage() {
+  try {
+    const [tripRes, seatsRes, driversRes] = await Promise.all([
+      fetch(`/api/trip-detail/${TRIP_ID}/`),
+      fetch(`/api/trip-detail/${TRIP_ID}/seats/`),
+      fetch(`/api/trip-detail/drivers/`),
+    ]);
+    const tripJson    = await tripRes.json();
+    const seatsJson   = await seatsRes.json();
+    const driversJson = await driversRes.json();
+
+    if (!tripRes.ok) throw new Error(tripJson.error || 'Failed to load trip');
+
+    tripData  = tripJson.result  || tripJson;
+    seatsData = seatsJson.result || seatsJson;
+    drivers   = Array.isArray(driversJson.result) ? driversJson.result : [];
+
+    renderHero();
+    renderInfoRows();
+    renderSeatStats();
+    renderBus();
+    renderDriverPanel();
+
+    document.getElementById('pageLoading').style.display  = 'none';
+    document.getElementById('pageContent').style.display  = 'block';
+    document.getElementById('seatSpinner').style.display  = 'none';
+  } catch (err) {
+    document.getElementById('pageLoading').style.display  = 'none';
+    document.getElementById('apiBanner').style.display    = 'flex';
+    document.getElementById('apiBannerMsg').textContent   = err.message;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function fmtDT(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
+}
+
+function statusInfo(id, name) {
+  const n = (name || '').toLowerCase();
+  if (!name || name.trim() === '') return { cls:'scheduled', label:'Scheduled', icon:'clock' };
+  if (n.includes('depart')) return { cls:'departed',  label:name, icon:'plane-departure' };
+  if (n.includes('arriv'))  return { cls:'arrived',   label:name, icon:'plane-arrival' };
+  if (n.includes('cancel')) return { cls:'cancelled', label:name, icon:'ban' };
+  return { cls:'scheduled', label:name||'Scheduled', icon:'clock' };
+}
+
+// ── Render hero ───────────────────────────────────────
+function renderHero() {
+  const t  = tripData;
+  const st = statusInfo(t.tripStatusId, t.tripStatusName);
+  const dep  = fmtTime(t.departureTime);
+  const arr  = fmtTime(t.arrivalTime);
+  const date = fmtDate(t.departureTime);
+
+  // Read route name from URL query param (passed by trip_instances.html)
+  const params    = new URLSearchParams(window.location.search);
+  const routeName = params.get('route') || '';
+
+  // Split "AL-MALKI - Harasta" into from/to exactly like trip_instances does
+  let fromCode = 'DEP', toCode = 'ARR', fromName = 'Departure', toName = 'Arrival';
+  if (routeName) {
+    const parts = routeName.split(' - ');
+    fromName = parts[0] || routeName;
+    toName   = parts[1] || '';
+    fromCode = fromName.slice(0, 3).toUpperCase();
+    toCode   = toName.slice(0, 3).toUpperCase();
+  }
+
+  document.getElementById('tripHero').innerHTML = `
+    <div class="th-top">
+      <span class="th-id"><i class="fas fa-hashtag" style="font-size:9px"></i>Trip ${t.id}</span>
+      <span class="th-status ${st.cls}"><i class="fas fa-${st.icon}" style="font-size:9px"></i> ${st.label}</span>
+    </div>
+    <div class="th-route">
+      <div class="th-city">
+        <span class="th-city-code">${fromCode}</span>
+        <span class="th-city-name">${fromName}</span>
+      </div>
+      <div class="th-mid">
+        <div class="th-mid-line"></div>
+        <i class="fas fa-bus th-mid-bus"></i>
+      </div>
+      <div class="th-city" style="align-items:flex-end;text-align:right">
+        <span class="th-city-code">${toCode}</span>
+        <span class="th-city-name">${toName}</span>
+      </div>
+    </div>
+    <div class="th-times">
+      <div class="th-time-block">
+        <span class="th-time-label">Departure</span>
+        <span class="th-time-val dep">${dep}</span>
+        <span class="th-time-date">${date}</span>
+      </div>
+      <span style="color:var(--text-mute);font-size:20px;opacity:.3;margin:0 .5rem">→</span>
+      <div class="th-time-block">
+        <span class="th-time-label">Arrival</span>
+        <span class="th-time-val arr">${arr}</span>
+        <span class="th-time-date">${date}</span>
+      </div>
+    </div>`;
+    // Update breadcrumb with route name
+  const bc = document.querySelector('.breadcrumb-current');
+  if (bc && routeName) bc.textContent = `My Trips / ${routeName}`;
+}
+
+// ── Render info rows ──────────────────────────────────
+function renderInfoRows() {
+  const t = tripData;
+  const seats = seatsData?.seats || [];
+  const avail = seats.filter(s => s.seatStatusId === 1).length;
+  const resv  = seats.filter(s => s.seatStatusId !== 1).length;
+
+  document.getElementById('tripInfoRows').innerHTML = `
+    <div class="info-row"><span class="info-label"><i class="fas fa-hashtag"></i> Trip ID</span><span class="info-value">#${t.id}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-calendar-alt"></i> Schedule ID</span><span class="info-value">#${t.tripScheduleId}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-bus"></i> Bus</span><span class="info-value">${t.busName || '—'}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-id-badge"></i> Driver</span><span class="info-value" id="infoDriverVal">${t.driverName || '<span style="opacity:.5;font-style:italic">Not assigned</span>'}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-plane-departure"></i> Departure</span><span class="info-value">${fmtDT(t.departureTime)}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-plane-arrival"></i> Arrival</span><span class="info-value">${fmtDT(t.arrivalTime)}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-chair"></i> Total Seats</span><span class="info-value">${seats.length}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-check-circle" style="color:#34d399"></i> Available</span><span class="info-value" style="color:#34d399;font-weight:800">${avail}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-lock" style="color:#f43f5e"></i> Reserved</span><span class="info-value" style="color:#f43f5e;font-weight:800">${resv}</span></div>
+    <div class="info-row"><span class="info-label"><i class="fas fa-tag"></i> Price</span><span class="info-value">${t.price ?? 0} SYP</span></div>`;
+}
+
+// ── Render seat stats ─────────────────────────────────
+function renderSeatStats() {
+  const seats = seatsData?.seats || [];
+  const avail = seats.filter(s => s.seatStatusId === 1).length;
+  const resv  = seats.filter(s => s.seatStatusId !== 1).length;
+  const pct   = seats.length > 0 ? Math.round((avail / seats.length) * 100) : 0;
+
+  document.getElementById('seatStats').innerHTML = `
+    <div class="seat-stat avail">
+      <span class="seat-stat-val">${avail}</span>
+      <span class="seat-stat-label"><i class="fas fa-check-circle"></i> Available</span>
+    </div>
+    <div class="seat-stat resv">
+      <span class="seat-stat-val">${resv}</span>
+      <span class="seat-stat-label"><i class="fas fa-lock"></i> Reserved</span>
+    </div>
+    <div class="detail-card" style="flex:1;padding:.9rem;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:center">
+      <span style="font-size:24px;font-weight:900;color:var(--text)">${pct}%</span>
+      <span style="font-size:10px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.7px">Free</span>
+      <div style="width:100%;height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden">
+        <div style="height:100%;border-radius:3px;background:linear-gradient(90deg,#10b981,#059669);width:${pct}%;transition:width .6s ease"></div>
+      </div>
+    </div>`;
+}
+
+// ── Render bus seat map ───────────────────────────────
+function renderBus() {
+  const result = seatsData;
+  const seats  = result?.seats || [];
+  const single = result?.single || false;
+  const connLastRow       = result?.connectedLastRow || false;
+  const lastRowSeatCount  = result?.numberOfSeatsInLastRow || 3;
+
+  document.getElementById('busSubLabel').textContent =
+    `${seats.length} seats · hover for details`;
+
+  if (seats.length === 0) {
+    document.getElementById('busShell').innerHTML =
+      '<div style="padding:2rem;text-align:center;color:var(--text-mute);font-size:13px">No seat data available</div>';
+    return;
+  }
+
+  // Build rows: seats arranged in pairs (left 2, aisle, right 2) — standard bus layout
+  // Single layout = 1 seat left, aisle, 2 seats right
+  const SEATS_PER_ROW = 4; // 2+2 standard
+  const leftPerRow    = single ? 1 : 2;
+  const rightPerRow   = 2;
+
+  // Separate last row seats vs normal seats
+  let normalSeats, lastRowSeats;
+  if (connLastRow && lastRowSeatCount > 0) {
+    lastRowSeats  = seats.slice(-lastRowSeatCount);
+    normalSeats   = seats.slice(0, seats.length - lastRowSeatCount);
+  } else {
+    normalSeats  = seats;
+    lastRowSeats = [];
+  }
+
+  // Build rows from normal seats
+  const seatsPerRow = leftPerRow + rightPerRow;
+  const rows = [];
+  for (let i = 0; i < normalSeats.length; i += seatsPerRow) {
+    rows.push(normalSeats.slice(i, i + seatsPerRow));
+  }
+
+  // driver row + seat rows HTML
+  const driverName = tripData.driverName;
+  let html = `
+    <!-- Front of bus -->
+    <div class="bus-front">
+      <span class="bus-front-text"><i class="fas fa-bus"></i> Bus ${tripData.busName || ''}</span>
+      <div class="bus-windshield">
+        <div class="windshield-panel"></div>
+        <div class="windshield-panel"></div>
+      </div>
+    </div>
+
+    <!-- Driver -->
+    <div class="bus-driver-row">
+      <div class="driver-wheel"><i class="fas fa-circle-notch"></i></div>
+      <span class="driver-label">Driver</span>
+      ${driverName
+        ? `<span class="driver-assigned"><i class="fas fa-user-check"></i> ${driverName}</span>`
+        : `<span class="driver-assigned" style="color:var(--text-mute);font-style:italic">Not assigned</span>`}
+    </div>
+
+    <!-- Seats -->
+    <div class="bus-interior">`;
+
+  rows.forEach((rowSeats, rowIdx) => {
+    const left  = rowSeats.slice(0, leftPerRow);
+    const right = rowSeats.slice(leftPerRow);
+    html += `<div class="seat-row">
+      <span class="seat-row-num">${rowIdx + 1}</span>
+      ${left.map(s => seatHTML(s)).join('')}
+      <span class="seat-aisle"></span>
+      ${right.map(s => seatHTML(s)).join('')}
+    </div>`;
+  });
+
+  // Last row — full width row
+  if (lastRowSeats.length > 0) {
+    html += `<div style="height:1px;background:rgba(255,255,255,.06);margin:4px 0"></div>`;
+    html += `<div class="seat-row" style="justify-content:center;gap:5px">
+      ${lastRowSeats.map(s => seatHTML(s)).join('')}
+    </div>`;
+  }
+
+  html += `</div>
+    <!-- Rear lights -->
+    <div class="bus-rear">
+      <div class="bus-rear-light"></div>
+      <div class="bus-rear-light"></div>
+      <div class="bus-rear-light"></div>
+    </div>`;
+
+  document.getElementById('busShell').innerHTML = html;
+
+  // Attach tooltip events
+  document.querySelectorAll('.seat').forEach(el => {
+    el.addEventListener('mouseenter', showSeatTooltip);
+    el.addEventListener('mouseleave', hideSeatTooltip);
+  });
+}
+
+function seatHTML(s) {
+  const avail   = s.seatStatusId === 1;
+  const cls     = avail ? 'avail' : 'resv';
+  const pName   = s.passengerName       ? ` data-passenger="${s.passengerName}"` : '';
+  const pPhone  = s.passengerPhoneNumber? ` data-phone="${s.passengerPhoneNumber}"` : '';
+  const until   = s.reservedUntil       ? ` data-until="${s.reservedUntil}"` : '';
+  return `<div class="seat ${cls}"
+    data-seat="${s.busSeatName}"
+    data-status="${s.seatStatusName}"
+    data-avail="${avail}"
+    ${pName}${pPhone}${until}
+    title="Seat ${s.busSeatName}">
+    <div class="seat-back"></div>
+    <span class="seat-num">${s.busSeatName}</span>
+  </div>`;
+}
+
+// ── Seat tooltip ──────────────────────────────────────
+function showSeatTooltip(e) {
+  const el    = e.currentTarget;
+  const avail = el.dataset.avail === 'true';
+  const tt    = document.getElementById('seatTooltip');
+
+  document.getElementById('ttSeat').textContent   = `Seat ${el.dataset.seat}`;
+  document.getElementById('ttStatus').textContent = el.dataset.status;
+  document.getElementById('ttDot').style.background = avail ? '#10b981' : '#f43f5e';
+
+  let extra = '';
+  if (!avail) {
+    if (el.dataset.passenger) extra += `<div><i class="fas fa-user" style="margin-right:4px"></i>${el.dataset.passenger}</div>`;
+    if (el.dataset.phone)     extra += `<div><i class="fas fa-phone" style="margin-right:4px"></i>${el.dataset.phone}</div>`;
+    if (el.dataset.until) {
+      const d = new Date(el.dataset.until);
+      extra += `<div><i class="fas fa-clock" style="margin-right:4px"></i>Until ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>`;
+    }
+  }
+  document.getElementById('ttExtra').innerHTML = extra;
+
+  tt.style.left = (e.clientX + 14) + 'px';
+  tt.style.top  = (e.clientY - 10) + 'px';
+  tt.classList.add('visible');
+}
+
+function hideSeatTooltip() {
+  document.getElementById('seatTooltip').classList.remove('visible');
+}
+
+// ── Render driver panel ───────────────────────────────
+function renderDriverPanel() {
+  const t = tripData;
+
+  // Current driver display
+  const wrap = document.getElementById('currentDriverWrap');
+  if (t.driverName) {
+    wrap.innerHTML = `
+      <div class="assign-current">
+        <div class="assign-avatar">${t.driverName.charAt(0).toUpperCase()}</div>
+        <div class="assign-info">
+          <span class="assign-name">${t.driverName}</span>
+          <span class="assign-sub">Currently assigned driver</span>
+        </div>
+      </div>`;
+  } else {
+    wrap.innerHTML = `<div class="assign-none"><i class="fas fa-user-slash"></i> No driver assigned</div>`;
+  }
+
+  // Populate driver dropdown
+  const sel = document.getElementById('driverSelect');
+  if (drivers.length === 0) {
+    sel.innerHTML = '<option value="">No drivers found</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select driver...</option>';
+  drivers.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = `${d.fullName} — ${d.busCompanyOfficeName || ''}`;
+    if (t.driverId && d.appUserId === t.driverId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+// ── Assign driver ─────────────────────────────────────
+async function submitAssignDriver() {
+  const driverId = document.getElementById('driverSelect').value;
+  const errEl    = document.getElementById('assignError');
+  errEl.style.display = 'none';
+
+  if (!driverId) {
+    errEl.style.display = 'block';
+    errEl.textContent   = 'Please select a driver.';
+    return;
+  }
+
+  document.getElementById('assignBtn').disabled            = true;
+  document.getElementById('assignBtnLabel').style.display  = 'none';
+  document.getElementById('assignBtnLoading').style.display = 'inline-flex';
+
+  try {
+    const res = await fetch('/api/trip-detail/assign-driver/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ tripInstanceId: TRIP_ID, driverId: parseInt(driverId) }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      const r = data.result || {};
+      // Update cached trip data
+      tripData.driverName = r.driverName || '';
+      tripData.driverId   = r.driverId   || null;
+      // Refresh panels
+      renderDriverPanel();
+      renderInfoRows();
+      renderBus();
+      showToast(`Driver "${r.driverName}" assigned successfully`, 'success');
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to assign driver.';
+      errEl.style.display = 'block';
+      errEl.textContent   = msg;
+    }
+  } catch (err) {
+    errEl.style.display = 'block';
+    errEl.textContent   = 'Network error. Please try again.';
+  } finally {
+    document.getElementById('assignBtn').disabled            = false;
+    document.getElementById('assignBtnLabel').style.display  = 'inline-flex';
+    document.getElementById('assignBtnLoading').style.display = 'none';
+  }
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

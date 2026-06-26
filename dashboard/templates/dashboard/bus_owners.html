@@ -1,0 +1,675 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Bus Owners — Bus Station{% endblock %}
+{% block breadcrumb %}Company / Bus Owners{% endblock %}
+{% block page_title %}Bus Company Owners{% endblock %}
+{% block nav_company %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/bus_owners.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="ownerSearch" placeholder="Search by name, email or phone..." />
+    </div>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadOwners()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-user-plus"></i> New Owner
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPI Stats -->
+<div class="owner-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#f59e0b">
+    <div class="kpi-icon"><i class="fas fa-user-tie"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Owners</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-line"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-building"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statWithCompanies">0</span>
+      <span class="kpi-label">With Companies</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-bar"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#6366f1">
+    <div class="kpi-icon"><i class="fas fa-user-clock"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statNew">0</span>
+      <span class="kpi-label">Added This Month</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-calendar-plus"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#ec4899">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-card">
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading bus owners from API...</span>
+  </div>
+
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table" id="ownersTable">
+      <thead>
+        <tr>
+          <th style="width:60px">ID</th>
+          <th>Owner</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Registered</th>
+          <th style="width:130px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ownersBody"></tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-user-tie"></i></div>
+    <h3 class="empty-title">No bus owners found</h3>
+    <p class="empty-desc">Try adjusting your search or register the first owner.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-user-plus"></i> New Owner</button>
+  </div>
+
+  <div class="pagination" id="paginationWrap" style="display:none">
+    <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+
+<!-- ── VIEW MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-user-tie"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewModalName">Owner Details</h3>
+        <p class="modal-subtitle" id="viewModalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="owner-profile-header" id="viewProfileHeader">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+      <div class="info-rows" id="viewInfoRows"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-primary" id="viewEditBtn"><i class="fas fa-pen"></i> Edit</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── CREATE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-user-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Bus Owner</h3>
+        <p class="modal-subtitle">Register a new bus company owner</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> First Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createFirstName" placeholder="e.g. Ahmad" autocomplete="off" />
+        <span class="form-field-error" id="createFirstNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> Last Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createLastName" placeholder="e.g. Al-Hassan" autocomplete="off" />
+        <span class="form-field-error" id="createLastNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-envelope"></i> Email <span class="req">*</span></label>
+        <input type="email" class="form-input" id="createEmail" placeholder="e.g. owner@company.com" autocomplete="off" />
+        <span class="form-field-error" id="createEmailErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-phone"></i> Phone Number <span class="req">*</span></label>
+        <input type="text" class="form-input" id="createPhone" placeholder="e.g. 0912345678" autocomplete="off" />
+        <span class="form-field-error" id="createPhoneErr"></span>
+      </div>
+      <div class="form-field full-col">
+        <label class="form-label"><i class="fas fa-lock"></i> Password <span class="req">*</span></label>
+        <div class="password-wrap">
+          <input type="password" class="form-input" id="createPassword" placeholder="Enter password" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" onclick="togglePw('createPassword','createPwIcon')">
+            <i class="fas fa-eye" id="createPwIcon"></i>
+          </button>
+        </div>
+        <span class="form-field-error" id="createPasswordErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-user-plus"></i> Create Owner</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── EDIT MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-user-edit"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Owner</h3>
+        <p class="modal-subtitle" id="editModalSub">Update owner details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+
+    <div class="modal-body two-col">
+      <input type="hidden" id="editOwnerId" />
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> First Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editFirstName" autocomplete="off" />
+        <span class="form-field-error" id="editFirstNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-user"></i> Last Name <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editLastName" autocomplete="off" />
+        <span class="form-field-error" id="editLastNameErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-envelope"></i> Email <span class="req">*</span></label>
+        <input type="email" class="form-input" id="editEmail" autocomplete="off" />
+        <span class="form-field-error" id="editEmailErr"></span>
+      </div>
+      <div class="form-field">
+        <label class="form-label"><i class="fas fa-phone"></i> Phone Number <span class="req">*</span></label>
+        <input type="text" class="form-input" id="editPhone" autocomplete="off" />
+        <span class="form-field-error" id="editPhoneErr"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── DELETE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-user-times"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Owner?</h3>
+        <p class="modal-subtitle" id="deleteModalSub">This action cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="modal-body">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete <strong id="deleteOwnerName">—</strong>.
+           All associated data may also be affected. This cannot be undone.</p>
+      </div>
+      <input type="hidden" id="deleteOwnerId" />
+      <div class="modal-error" id="deleteError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="deleteErrorMsg"></span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" onclick="submitDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete Owner</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allOwners      = [];
+let filteredOwners = [];
+let currentPage    = 1;
+const PAGE_SIZE    = 15;
+
+// ── Toast fallback ────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = function(message, type) {
+    const existing = document.getElementById('_ownerToast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = '_ownerToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f59e0b';
+    toast.style.cssText = `
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 20px;border-radius:14px;
+      background:${bg};color:#fff;font-size:13.5px;font-weight:600;
+      box-shadow:0 12px 36px rgba(0,0,0,.4);
+      animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);
+    `;
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'trash' : 'info-circle';
+    toast.innerHTML = `<i class="fas fa-${icon}"></i><span>${message}</span>`;
+    if (!document.getElementById('_toastKF')) {
+      const s = document.createElement('style');
+      s.id = '_toastKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity='0'; toast.style.transition='opacity .3s'; setTimeout(()=>toast.remove(),300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadOwners();
+  document.getElementById('ownerSearch').addEventListener('input', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load owners ───────────────────────────────────────
+async function loadOwners() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const res  = await fetch('/api/bus-owners/');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    allOwners = Array.isArray(data.result) ? data.result
+              : Array.isArray(data) ? data : [];
+    applyFilters();
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load owners: ' + err.message;
+    setTableLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q = document.getElementById('ownerSearch').value.toLowerCase().trim();
+  filteredOwners = allOwners.filter(o => {
+    const text = `${o.firstName} ${o.lastName} ${o.email} ${o.phoneNumber}`.toLowerCase();
+    return !q || text.includes(q);
+  });
+  currentPage = 1;
+  renderTable();
+  updateKPIs();
+}
+
+// ── Render table ──────────────────────────────────────
+function renderTable() {
+  setTableLoading(false);
+  if (filteredOwners.length === 0) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredOwners.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('ownersBody').innerHTML = page.map((o, i) => {
+    const full    = o.fullName || `${o.firstName || ''} ${o.lastName || ''}`.trim() || '—';
+    const initial = full.charAt(0).toUpperCase();
+    const joined  = o.createdOn ? new Date(o.createdOn).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+    const safeName = full.replace(/'/g,"\\'");
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${o.id}</span></td>
+      <td>
+        <div class="owner-cell">
+          <div class="owner-avatar">${initial}</div>
+          <div class="owner-info">
+            <span class="owner-name">${full}</span>
+            <span class="owner-sub">ID: ${o.id}</span>
+          </div>
+        </div>
+      </td>
+      <td><span class="email-tag"><i class="fas fa-envelope"></i> ${o.email || '—'}</span></td>
+      <td><span class="phone-tag"><i class="fas fa-phone"></i> ${o.phoneNumber || '—'}</span></td>
+      <td><span class="date-text">${joined}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${o.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModalById(${o.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${o.id}, '${safeName}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalPages = Math.ceil(filteredOwners.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled = currentPage === 1;
+  document.getElementById('nextBtn').disabled = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredOwners.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const now        = new Date();
+  const thisMonth  = allOwners.filter(o => {
+    if (!o.createdOn) return false;
+    const d = new Date(o.createdOn);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+  const withCompanies = allOwners.filter(o => o.companies && o.companies.length > 0).length;
+
+  document.getElementById('statTotal').textContent        = allOwners.length;
+  document.getElementById('statWithCompanies').textContent = withCompanies;
+  document.getElementById('statNew').textContent           = thisMonth;
+  document.getElementById('statShowing').textContent       = filteredOwners.length;
+}
+
+// ── View modal ────────────────────────────────────────
+async function openViewModal(ownerId) {
+  document.getElementById('viewModal').style.display   = 'flex';
+  document.getElementById('viewModalName').textContent = 'Loading...';
+  document.getElementById('viewModalSub').textContent  = `Owner #${ownerId}`;
+  document.getElementById('viewProfileHeader').innerHTML = '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+  document.getElementById('viewInfoRows').innerHTML = '';
+
+  try {
+    const res  = await fetch(`/api/bus-owners/${ownerId}/`);
+    const data = await res.json();
+    const o    = data.result || data;
+
+    const full   = o.fullName || `${o.firstName || ''} ${o.lastName || ''}`.trim();
+    const joined = o.createdOn ? new Date(o.createdOn).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' }) : '—';
+
+    document.getElementById('viewModalName').textContent = full;
+
+    document.getElementById('viewProfileHeader').innerHTML = `
+      <div class="profile-avatar-lg">${full.charAt(0).toUpperCase()}</div>
+      <div class="profile-name-block">
+        <h4 class="profile-full-name">${full}</h4>
+        <span class="owner-role-badge"><i class="fas fa-user-tie"></i> Bus Company Owner</span>
+      </div>`;
+
+    document.getElementById('viewInfoRows').innerHTML = `
+      <div class="info-row"><span class="info-label"><i class="fas fa-hashtag"></i> Owner ID</span><span class="info-value"><span class="id-badge">#${o.id}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-user"></i> Full Name</span><span class="info-value">${full}</span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-envelope"></i> Email</span><span class="info-value"><span class="email-tag"><i class="fas fa-envelope"></i> ${o.email || '—'}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-phone"></i> Phone</span><span class="info-value"><span class="phone-tag"><i class="fas fa-phone"></i> ${o.phoneNumber || '—'}</span></span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-calendar-plus"></i> Registered</span><span class="info-value">${joined}</span></div>
+      <div class="info-row"><span class="info-label"><i class="fas fa-building"></i> Companies</span><span class="info-value">${o.companies ? o.companies.length : 0}</span></div>`;
+
+    document.getElementById('viewEditBtn').onclick = () => {
+      closeModal('viewModal');
+      openEditModal({ id: o.id, firstName: o.firstName, lastName: o.lastName, email: o.email, phoneNumber: o.phoneNumber });
+    };
+  } catch (err) {
+    document.getElementById('viewProfileHeader').innerHTML = '';
+    document.getElementById('viewInfoRows').innerHTML = `<p style="color:#f87171;padding:1rem;text-align:center">Failed to load owner details.</p>`;
+  }
+}
+
+// ── Create modal ──────────────────────────────────────
+function openCreateModal() {
+  ['createFirstName','createLastName','createEmail','createPhone','createPassword'].forEach(id => document.getElementById(id).value = '');
+  ['createFirstNameErr','createLastNameErr','createEmailErr','createPhoneErr','createPasswordErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('createFirstName').focus(), 100);
+}
+
+async function submitCreate() {
+  const firstName   = document.getElementById('createFirstName').value.trim();
+  const lastName    = document.getElementById('createLastName').value.trim();
+  const email       = document.getElementById('createEmail').value.trim();
+  const phoneNumber = document.getElementById('createPhone').value.trim();
+  const password    = document.getElementById('createPassword').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(firstName,   'createFirstNameErr', 'First name is required');
+  req(lastName,    'createLastNameErr',  'Last name is required');
+  req(email,       'createEmailErr',     'Email is required');
+  req(phoneNumber, 'createPhoneErr',     'Phone number is required');
+  req(password,    'createPasswordErr',  'Password is required');
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/bus-owners/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ firstName, lastName, email, phoneNumber, password }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast(`Owner "${firstName} ${lastName}" created successfully`, 'success');
+      loadOwners();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create owner.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────
+function openEditModal(o) {
+  document.getElementById('editOwnerId').value  = o.id;
+  document.getElementById('editFirstName').value = o.firstName || '';
+  document.getElementById('editLastName').value  = o.lastName  || '';
+  document.getElementById('editEmail').value     = o.email     || '';
+  document.getElementById('editPhone').value     = o.phoneNumber || '';
+  document.getElementById('editModalSub').textContent = `Editing: ${o.firstName} ${o.lastName}`;
+  ['editFirstNameErr','editLastNameErr','editEmailErr','editPhoneErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('editFirstName').focus(), 100);
+}
+
+function openEditModalById(id) {
+  const o = allOwners.find(x => x.id === id);
+  if (o) openEditModal(o);
+}
+
+async function submitEdit() {
+  const id          = parseInt(document.getElementById('editOwnerId').value);
+  const firstName   = document.getElementById('editFirstName').value.trim();
+  const lastName    = document.getElementById('editLastName').value.trim();
+  const email       = document.getElementById('editEmail').value.trim();
+  const phoneNumber = document.getElementById('editPhone').value.trim();
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(firstName,   'editFirstNameErr', 'First name is required');
+  req(lastName,    'editLastNameErr',  'Last name is required');
+  req(email,       'editEmailErr',     'Email is required');
+  req(phoneNumber, 'editPhoneErr',     'Phone number is required');
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/bus-owners/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ id, firstName, lastName, email, phoneNumber }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast(`Owner "${firstName} ${lastName}" updated successfully`, 'success');
+      loadOwners();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update owner.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── Delete modal ──────────────────────────────────────
+function openDeleteModal(ownerId, name) {
+  document.getElementById('deleteOwnerId').value        = ownerId;
+  document.getElementById('deleteOwnerName').textContent = name;
+  document.getElementById('deleteModalSub').textContent  = `Owner #${ownerId}`;
+  document.getElementById('deleteError').style.display   = 'none';
+  document.getElementById('deleteModal').style.display   = 'flex';
+}
+
+async function submitDelete() {
+  const ownerId = parseInt(document.getElementById('deleteOwnerId').value);
+  document.getElementById('deleteError').style.display = 'none';
+  setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+
+  try {
+    const res  = await fetch(`/api/bus-owners/delete/${ownerId}/`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast('Owner deleted successfully', 'error');
+      allOwners      = allOwners.filter(o => o.id !== ownerId);
+      filteredOwners = filteredOwners.filter(o => o.id !== ownerId);
+      renderTable();
+      updateKPIs();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete owner.';
+      document.getElementById('deleteError').style.display  = 'flex';
+      document.getElementById('deleteErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('deleteError').style.display  = 'flex';
+    document.getElementById('deleteErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setTableLoading(loading) {
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled              = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function togglePw(inputId, iconId) {
+  const inp = document.getElementById(inputId);
+  const ico = document.getElementById(iconId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  ico.className = inp.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}

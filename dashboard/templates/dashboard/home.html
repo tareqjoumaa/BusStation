@@ -1,0 +1,307 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Overview — Bus Station{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+
+<!-- Stat Cards -->
+<div class="stat-grid">
+
+  <div class="stat-card" style="--accent:#3b82f6;--delay:0ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-ticket-alt"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Total Reservations</span>
+      <span class="stat-value counter" data-target="{{ stats.total_reservations }}">0</span>
+      <span class="stat-growth positive"><i class="fas fa-arrow-up"></i> +12.4% this month</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,25 15,18 30,22 45,10 60,15 80,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card" style="--accent:#10b981;--delay:80ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-calendar-day"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Trips Today</span>
+      <span class="stat-value counter" data-target="{{ stats.trips_today }}">0</span>
+      <span class="stat-growth positive"><i class="fas fa-arrow-up"></i> +3 vs yesterday</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,20 15,15 30,18 45,8 60,12 80,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card" style="--accent:#f59e0b;--delay:160ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-bus"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Available Buses</span>
+      <span class="stat-value counter" data-target="{{ stats.available_buses }}">0</span>
+      <span class="stat-growth negative"><i class="fas fa-arrow-down"></i> 2 in maintenance</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,10 15,18 30,12 45,20 60,14 80,18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card" style="--accent:#8b5cf6;--delay:240ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-id-card"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Active Drivers</span>
+      <span class="stat-value counter" data-target="{{ stats.active_drivers }}">0</span>
+      <span class="stat-growth positive"><i class="fas fa-arrow-up"></i> All on schedule</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,15 15,12 30,15 45,10 60,12 80,8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card" style="--accent:#ef4444;--delay:320ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-building"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Total Offices</span>
+      <span class="stat-value counter" data-target="{{ stats.total_offices }}">0</span>
+      <span class="stat-growth positive"><i class="fas fa-arrow-up"></i> 2 countries</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,20 15,20 30,15 45,15 60,10 80,10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="stat-card" style="--accent:#06b6d4;--delay:400ms">
+    <div class="stat-card-bg"></div>
+    <div class="stat-icon-wrap"><i class="fas fa-dollar-sign"></i></div>
+    <div class="stat-body">
+      <span class="stat-label">Monthly Revenue</span>
+      <span class="stat-value counter" data-target="{{ stats.monthly_revenue }}" data-prefix="$">0</span>
+      <span class="stat-growth positive"><i class="fas fa-arrow-up"></i> +8.7% vs last month</span>
+    </div>
+    <div class="stat-sparkline">
+      <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+        <polyline points="0,22 15,18 30,15 45,12 60,8 80,4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions-bar">
+  <span class="qa-label">Quick Actions</span>
+  <div class="qa-buttons">
+    <button class="qa-btn" onclick="showToast('Opening new reservation form...','info')">
+      <i class="fas fa-plus-circle"></i> New Reservation
+    </button>
+    <button class="qa-btn" onclick="showToast('Opening add bus form...','info')">
+      <i class="fas fa-bus"></i> Add Bus
+    </button>
+    <button class="qa-btn" onclick="showToast('Opening add office form...','info')">
+      <i class="fas fa-building"></i> Add Office
+    </button>
+    <button class="qa-btn" onclick="showToast('Opening add employee form...','info')">
+      <i class="fas fa-user-plus"></i> Add Employee
+    </button>
+    <button class="qa-btn accent" onclick="showToast('Generating report...','success')">
+      <i class="fas fa-file-chart-line"></i> Create Report
+    </button>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="charts-grid">
+
+  <div class="chart-card wide">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Reservations Trend</h3>
+        <p class="chart-sub">Daily bookings — last 30 days</p>
+      </div>
+      <div class="chart-legend">
+        <span class="legend-dot" style="background:#3b82f6"></span> Confirmed
+        <span class="legend-dot" style="background:#10b981"></span> Completed
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="reservationsLineChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Booking Status</h3>
+        <p class="chart-sub">Current distribution</p>
+      </div>
+    </div>
+    <div class="chart-wrap donut-wrap">
+      <canvas id="statusDonutChart"></canvas>
+      <div class="donut-center">
+        <span class="donut-value">{{ stats.total_reservations }}</span>
+        <span class="donut-label">Total</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="charts-grid">
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Monthly Revenue</h3>
+        <p class="chart-sub">Revenue per month ($)</p>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="revenueBarChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Top Routes</h3>
+        <p class="chart-sub">By booking volume</p>
+      </div>
+    </div>
+    <div class="chart-wrap donut-wrap">
+      <canvas id="routesPieChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3 class="chart-title">Bus Occupancy</h3>
+        <p class="chart-sub">Average seat fill rate</p>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="occupancyChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom Panel -->
+<div class="bottom-grid">
+
+  <!-- Recent Reservations -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3 class="panel-title"><i class="fas fa-clock"></i> Recent Reservations</h3>
+      <a href="{% url 'dashboard:reservations' %}" class="panel-link">View all <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="mini-table-wrap">
+      <table class="mini-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Passenger</th><th>Route</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr class="anim-row" style="--row-delay:{{ forloop.counter0 }}00ms">
+            <td><span class="id-badge">#{{ b.id }}</span></td>
+            <td>
+              <div class="passenger-cell">
+                <div class="mini-avatar">{{ b.customer_name|first }}</div>
+                <span>{{ b.customer_name }}</span>
+              </div>
+            </td>
+            <td>
+              <span class="route-cell">
+                <span class="flag">{{ b.trip_from }}</span>
+                <i class="fas fa-long-arrow-alt-right route-arrow"></i>
+                <span class="flag">{{ b.trip_to }}</span>
+              </span>
+            </td>
+            <td>
+              <span class="status-badge status-{{ b.status|lower }}">{{ b.status }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Activity Feed -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3 class="panel-title"><i class="fas fa-bolt"></i> Live Activity</h3>
+      <span class="live-dot"></span>
+    </div>
+    <div class="activity-feed">
+      {% for activity in activities %}
+      <div class="activity-item anim-row" style="--row-delay:{{ forloop.counter0 }}00ms">
+        <div class="activity-icon-wrap {{ activity.type }}">
+          <i class="{{ activity.icon }}"></i>
+        </div>
+        <div class="activity-body">
+          <p class="activity-text">{{ activity.message }}</p>
+          <span class="activity-time">{{ activity.time }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Maintenance Alerts -->
+  <div class="panel">
+    <div class="panel-header">
+      <h3 class="panel-title"><i class="fas fa-exclamation-triangle"></i> Alerts</h3>
+      <span class="alert-count">{{ alerts|length }}</span>
+    </div>
+    <div class="alerts-list">
+      {% for alert in alerts %}
+      <div class="alert-item {{ alert.level }}">
+        <div class="alert-icon"><i class="{{ alert.icon }}"></i></div>
+        <div class="alert-body">
+          <span class="alert-title">{{ alert.title }}</span>
+          <span class="alert-desc">{{ alert.description }}</span>
+        </div>
+        <button class="alert-dismiss" onclick="this.closest('.alert-item').style.opacity='0';setTimeout(()=>this.closest('.alert-item').remove(),300)">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/charts.js' %}"></script>
+<script>
+  // Pass Django data to JS
+  window.dashboardData = {
+    reservations: {{ chart_data.reservations|safe }},
+    revenue: {{ chart_data.revenue|safe }},
+    routes: {{ chart_data.routes|safe }},
+    occupancy: {{ chart_data.occupancy|safe }},
+    statuses: {{ chart_data.statuses|safe }},
+  };
+</script>
+{% endblock %}

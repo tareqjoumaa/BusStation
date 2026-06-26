@@ -1,0 +1,1068 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Trip Schedules — Bus Station{% endblock %}
+{% block breadcrumb %}Company / Trip Schedules{% endblock %}
+{% block page_title %}Trip Schedules{% endblock %}
+{% block nav_trip_schedules %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/trip_schedules.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="tripSearch" placeholder="Search by route or bus..." />
+    </div>
+    <select class="filter-select" id="filterRoute">
+      <option value="">All Routes</option>
+    </select>
+    <select class="filter-select" id="filterDay">
+      <option value="">All Days</option>
+      <option value="0">Sunday</option>
+      <option value="1">Monday</option>
+      <option value="2">Tuesday</option>
+      <option value="3">Wednesday</option>
+      <option value="4">Thursday</option>
+      <option value="5">Friday</option>
+      <option value="6">Saturday</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGrid" title="Card view" onclick="setView('grid')">
+        <i class="fas fa-th-large"></i>
+      </button>
+      <button class="view-btn" id="btnList" title="List view" onclick="setView('list')">
+        <i class="fas fa-list"></i>
+      </button>
+    </div>
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-plus"></i> New Schedule
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- KPI Stats -->
+<div class="ts-kpi-row" id="kpiRow" style="display:none">
+  <div class="kpi-card" style="--kc:#8b5cf6">
+    <div class="kpi-icon"><i class="fas fa-calendar-alt"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statTotal">0</span>
+      <span class="kpi-label">Total Schedules</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-chart-line"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#06b6d4">
+    <div class="kpi-icon"><i class="fas fa-route"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statRoutes">0</span>
+      <span class="kpi-label">Routes Covered</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-map"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#10b981">
+    <div class="kpi-icon"><i class="fas fa-bus"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statBuses">0</span>
+      <span class="kpi-label">Buses Assigned</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-bus-alt"></i></div>
+  </div>
+  <div class="kpi-card" style="--kc:#ec4899">
+    <div class="kpi-icon"><i class="fas fa-filter"></i></div>
+    <div class="kpi-body">
+      <span class="kpi-val" id="statShowing">0</span>
+      <span class="kpi-label">Showing</span>
+    </div>
+    <div class="kpi-sparkline"><i class="fas fa-eye"></i></div>
+  </div>
+</div>
+
+<!-- ── CARD GRID VIEW ───────────────────────────────── -->
+<div id="gridView">
+  <div class="grid-loading" id="gridLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading schedules...</span>
+  </div>
+  <div class="schedules-grid" id="schedulesGrid" style="display:none"></div>
+  <div class="empty-state" id="gridEmpty" style="display:none">
+    <div class="empty-icon"><i class="fas fa-calendar-times"></i></div>
+    <h3 class="empty-title">No schedules found</h3>
+    <p class="empty-desc">Try adjusting your filters or create a new schedule.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Schedule</button>
+  </div>
+  <div class="pagination" id="gridPagination" style="display:none">
+    <button class="page-btn" id="gridPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="gridPageInfo">Page 1</span>
+    <button class="page-btn" id="gridNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+<!-- ── LIST TABLE VIEW ──────────────────────────────── -->
+<div id="listView" style="display:none">
+  <div class="table-card">
+    <div class="table-loading" id="tableLoading" style="display:none">
+      <div class="loading-spinner"></div><span>Loading schedules...</span>
+    </div>
+    <div class="table-scroll" id="tableWrap" style="display:none">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>Route</th>
+            <th>Time</th>
+            <th>Price</th>
+            <th>Active Days</th>
+            <th>Bus</th>
+            <th style="width:110px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tripBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="listEmpty" style="display:none">
+      <div class="empty-icon"><i class="fas fa-calendar-times"></i></div>
+      <h3 class="empty-title">No schedules found</h3>
+      <p class="empty-desc">Try adjusting your filters or create a new schedule.</p>
+      <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Schedule</button>
+    </div>
+    <div class="pagination" id="listPagination" style="display:none">
+      <button class="page-btn" id="listPrevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+      <span class="page-info" id="listPageInfo">Page 1</span>
+      <button class="page-btn" id="listNextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     VIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="viewModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap view"><i class="fas fa-calendar-alt"></i></div>
+      <div>
+        <h3 class="modal-title" id="viewModalTitle">Schedule Details</h3>
+        <p class="modal-subtitle" id="viewModalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('viewModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="viewContent">
+        <div class="modal-spinner"><div class="loading-spinner sm"></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('viewModal')">Close</button>
+      <button class="btn-primary" id="viewEditBtn"><i class="fas fa-pen"></i> Edit</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     CREATE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Trip Schedule</h3>
+        <p class="modal-subtitle">Set route, times, price and active days</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-route"></i> Route <span class="req">*</span></label>
+          <select class="form-input" id="cRouteId">
+            <option value="">Select route...</option>
+          </select>
+          <span class="form-field-error" id="cRouteErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-bus"></i> Default Bus <span class="req">*</span></label>
+          <select class="form-input" id="cBusId">
+            <option value="">Select bus...</option>
+          </select>
+          <span class="form-field-error" id="cBusErr"></span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label"><i class="fas fa-plane-departure"></i> Departure Time <span class="req">*</span></label>
+            <input type="time" class="form-input" id="cDeparture" step="60" />
+            <span class="form-field-error" id="cDepErr"></span>
+          </div>
+          <div class="form-field">
+            <label class="form-label"><i class="fas fa-plane-arrival"></i> Arrival Time <span class="req">*</span></label>
+            <input type="time" class="form-input" id="cArrival" step="60" />
+            <span class="form-field-error" id="cArrErr"></span>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-tag"></i> Price <span class="req">*</span></label>
+          <input type="number" class="form-input" id="cPrice" placeholder="e.g. 500" min="0" />
+          <span class="form-field-error" id="cPriceErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-id-badge"></i> Driver <span style="color:var(--text-mute);font-weight:400;font-size:10px;margin-left:4px">(optional)</span></label>
+          <select class="form-input" id="cDriverId">
+            <option value="">No driver assigned</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-calendar-week"></i> Active Days <span class="req">*</span></label>
+          <div class="days-picker" id="cDaysPicker">
+            <!-- rendered by JS -->
+          </div>
+          <span class="days-err" id="cDaysErr"></span>
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create Schedule</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     EDIT MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Schedule</h3>
+        <p class="modal-subtitle" id="editModalSub">Update trip details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editTripId" />
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-bus"></i> Default Bus <span class="req">*</span></label>
+          <select class="form-input" id="eBusId">
+            <option value="">Select bus...</option>
+          </select>
+          <span class="form-field-error" id="eBusErr"></span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label"><i class="fas fa-plane-departure"></i> Departure Time <span class="req">*</span></label>
+            <input type="time" class="form-input" id="eDeparture" step="60" />
+            <span class="form-field-error" id="eDepErr"></span>
+          </div>
+          <div class="form-field">
+            <label class="form-label"><i class="fas fa-plane-arrival"></i> Arrival Time <span class="req">*</span></label>
+            <input type="time" class="form-input" id="eArrival" step="60" />
+            <span class="form-field-error" id="eArrErr"></span>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-tag"></i> Price <span class="req">*</span></label>
+          <input type="number" class="form-input" id="ePrice" min="0" />
+          <span class="form-field-error" id="ePriceErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-calendar-week"></i> Active Days <span class="req">*</span></label>
+          <div class="days-picker" id="eDaysPicker"></div>
+          <span class="days-err" id="eDaysErr"></span>
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     DELETE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-trash"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Schedule?</h3>
+        <p class="modal-subtitle" id="deleteModalSub">This cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete schedule <strong id="deleteLabel">—</strong>.</p>
+      </div>
+      <div class="modal-error" id="deleteError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="deleteErrorMsg"></span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" onclick="submitDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Constants ──────────────────────────────────────────
+const DAY_NAMES  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAY_FULL   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const PAGE_SIZE  = 12;
+
+// ── State ─────────────────────────────────────────────
+let allTrips      = [];
+let allRoutes     = [];
+let allBuses      = [];
+let filteredTrips = [];
+let allDrivers = [];
+let currentPage   = 1;
+let currentView   = 'grid';
+let pendingDeleteId = null;
+let createSelectedDays = new Set();
+let editSelectedDays   = new Set();
+
+// ── Toast ─────────────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = (msg, type) => {
+    const e = document.getElementById('_tsToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_tsToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#8b5cf6';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);`;
+    const ic = type === 'success' ? 'check-circle' : type === 'error' ? 'trash' : 'info-circle';
+    t.innerHTML = `<i class="fas fa-${ic}"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF')) {
+      const s = document.createElement('style'); s.id = '_tKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+  };
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  buildDayPickers();
+  loadAll();
+  document.getElementById('tripSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterRoute').addEventListener('change', applyFilters);
+  document.getElementById('filterDay').addEventListener('change', applyFilters);
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape')
+      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Build day toggle buttons ───────────────────────────
+function buildDayPickers() {
+  ['cDaysPicker', 'eDaysPicker'].forEach(containerId => {
+    const isCreate = containerId.startsWith('c');
+    const container = document.getElementById(containerId);
+    container.innerHTML = DAY_NAMES.map((d, i) => `
+      <button type="button" class="day-toggle" data-day="${i}" data-picker="${isCreate ? 'create' : 'edit'}"
+              onclick="toggleDay(${i}, '${isCreate ? 'create' : 'edit'}')">${d}</button>
+    `).join('');
+  });
+}
+
+function toggleDay(dayNum, picker) {
+  const set = picker === 'create' ? createSelectedDays : editSelectedDays;
+  if (set.has(dayNum)) set.delete(dayNum);
+  else set.add(dayNum);
+  refreshDayPicker(picker);
+}
+
+function refreshDayPicker(picker) {
+  const set       = picker === 'create' ? createSelectedDays : editSelectedDays;
+  const container = document.getElementById(picker === 'create' ? 'cDaysPicker' : 'eDaysPicker');
+  container.querySelectorAll('.day-toggle').forEach(btn => {
+    const day = parseInt(btn.dataset.day);
+    btn.classList.toggle('selected', set.has(day));
+  });
+}
+
+function setDays(picker, days) {
+  const set = picker === 'create' ? createSelectedDays : editSelectedDays;
+  set.clear();
+  days.forEach(d => set.add(d));
+  refreshDayPicker(picker);
+}
+
+// ── Load all ──────────────────────────────────────────
+// Replace loadAll() with this version that also fetches drivers
+async function loadAll() {
+  setLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const [tripsRes, routesRes, busesRes, driversRes] = await Promise.all([
+      fetch('/api/trip-schedules/'),
+      fetch('/api/trip-schedules/routes/'),
+      fetch('/api/trip-schedules/buses/'),
+      fetch('/api/trip-schedules/drivers/'),
+    ]);
+    const tripsData   = await tripsRes.json();
+    const routesData  = await routesRes.json();
+    const busesData   = await busesRes.json();
+    const driversData = await driversRes.json();
+
+    if (!tripsRes.ok) throw new Error(tripsData.error || 'HTTP ' + tripsRes.status);
+
+    allTrips   = Array.isArray(tripsData.result)   ? tripsData.result   : Array.isArray(tripsData)   ? tripsData   : [];
+    allRoutes  = Array.isArray(routesData.result)  ? routesData.result  : Array.isArray(routesData)  ? routesData  : [];
+    allBuses   = Array.isArray(busesData.result)   ? busesData.result   : Array.isArray(busesData)   ? busesData   : [];
+    allDrivers = Array.isArray(driversData.result) ? driversData.result : Array.isArray(driversData) ? driversData : [];
+
+    populateDropdowns();
+    applyFilters();
+
+    document.getElementById('kpiRow').style.display    = 'flex';
+    document.getElementById('apiBanner').style.display = 'none';
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load schedules: ' + err.message;
+    setLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+function populateDropdowns() {
+  // Filter route dropdown
+  const frSel = document.getElementById('filterRoute');
+  frSel.innerHTML = '<option value="">All Routes</option>';
+  allRoutes.forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.id;
+    o.textContent = r.routeName || `${r.fromCityName} → ${r.toCityName}` || `Route #${r.id}`;
+    frSel.appendChild(o);
+  
+  // Add inside populateDropdowns() after the bus dropdowns
+    const driverSel = document.getElementById('cDriverId');
+  driverSel.innerHTML = '<option value="">No driver assigned</option>';
+  allDrivers.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = `${d.fullName} — ${d.busCompanyOfficeName || ''}`;
+    driverSel.appendChild(o);
+  });
+  });
+
+  // Create/Edit route dropdown
+  const crSel = document.getElementById('cRouteId');
+  crSel.innerHTML = '<option value="">Select route...</option>';
+  allRoutes.forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.id;
+    o.textContent = r.routeName || `${r.fromCityName} → ${r.toCityName}` || `Route #${r.id}`;
+    crSel.appendChild(o);
+  });
+
+  // Bus dropdowns
+  ['cBusId', 'eBusId'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">Select bus...</option>';
+    allBuses.forEach(b => {
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent = b.name || b.busName || `Bus #${b.id}`;
+      sel.appendChild(o);
+    });
+  });
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q   = document.getElementById('tripSearch').value.toLowerCase().trim();
+  const rid = document.getElementById('filterRoute').value;
+  const day = document.getElementById('filterDay').value;
+
+  filteredTrips = allTrips.filter(t => {
+    const text    = `${t.routeName} ${t.busName}`.toLowerCase();
+    const routeOk = !rid || String(t.busRouteId) === rid;
+    const dayOk   = day === '' || (t.activeDays || []).includes(parseInt(day));
+    return (!q || text.includes(q)) && routeOk && dayOk;
+  });
+  currentPage = 1;
+  renderContent();
+  updateKPIs();
+}
+
+// ── KPIs ──────────────────────────────────────────────
+function updateKPIs() {
+  const routeSet = new Set(allTrips.map(t => t.busRouteId));
+  const busSet   = new Set(allTrips.map(t => t.defaultBusId));
+  document.getElementById('statTotal').textContent   = allTrips.length;
+  document.getElementById('statRoutes').textContent  = routeSet.size;
+  document.getElementById('statBuses').textContent   = busSet.size;
+  document.getElementById('statShowing').textContent = filteredTrips.length;
+}
+
+// ── View toggle ───────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('gridView').style.display = v === 'grid' ? 'block' : 'none';
+  document.getElementById('listView').style.display = v === 'list' ? 'block' : 'none';
+  document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('btnList').classList.toggle('active', v === 'list');
+  renderContent();
+}
+
+function renderContent() {
+  if (currentView === 'grid') renderGrid();
+  else renderTable();
+}
+
+// ── Helpers ───────────────────────────────────────────
+function fmtTime(t) {
+  // "15:00:00" → "15:00"
+  if (!t) return '—';
+  const parts = t.split(':');
+  return `${parts[0]}:${parts[1]}`;
+}
+
+function calcDuration(dep, arr) {
+  if (!dep || !arr) return '';
+  const [dh, dm] = dep.split(':').map(Number);
+  const [ah, am] = arr.split(':').map(Number);
+  let mins = (ah * 60 + am) - (dh * 60 + dm);
+  if (mins <= 0) mins += 24 * 60;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+function dayPillsHTML(activeDays, size = 'normal') {
+  return DAY_NAMES.map((d, i) => {
+    const on = (activeDays || []).includes(i);
+    if (size === 'dot') {
+      return `<span class="day-dot ${on ? 'on' : 'off'}" title="${DAY_FULL[i]}">${d[0]}</span>`;
+    }
+    return `<span class="day-pill ${on ? 'active' : 'inactive'}">${d}</span>`;
+  }).join('');
+}
+
+// ── GRID RENDER ───────────────────────────────────────
+function renderGrid() {
+  setLoading(false);
+  const grid  = document.getElementById('schedulesGrid');
+  const empty = document.getElementById('gridEmpty');
+  const pag   = document.getElementById('gridPagination');
+
+  if (filteredTrips.length === 0) {
+    grid.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.style.display  = 'grid';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredTrips.slice(start, start + PAGE_SIZE);
+  const dur   = (t) => calcDuration(t.departureTime, t.arrivalTime);
+
+  grid.innerHTML = page.map((t, i) => {
+    const dep     = fmtTime(t.departureTime);
+    const arr     = fmtTime(t.arrivalTime);
+    const joined  = t.createdOn
+      ? new Date(t.createdOn).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+      : '—';
+    const safeLabel = `#${t.id} — ${t.routeName || ''}`.replace(/'/g, "\\'");
+
+    return `
+    <div class="schedule-card" style="animation-delay:${i * 25}ms">
+      <div class="sc-topbar">
+        <span class="sc-id"><i class="fas fa-hashtag" style="font-size:9px"></i>${t.id}</span>
+        <span class="sc-route" title="${t.routeName || ''}"><i class="fas fa-route" style="font-size:10px"></i> ${t.routeName || '—'}</span>
+      </div>
+
+      <!-- Time block -->
+      <div class="sc-time-block">
+        <div class="sc-time-city">
+          <span class="sc-time-label">Departure</span>
+          <span class="sc-time">${dep.split(':')[0]}<span>:${dep.split(':')[1]}</span></span>
+        </div>
+        <div class="sc-duration-wrap">
+          <div class="sc-duration-line"><div class="sc-duration-dot"></div></div>
+          <span class="sc-duration-label">${dur(t)}</span>
+        </div>
+        <div class="sc-time-city">
+          <span class="sc-time-label">Arrival</span>
+          <span class="sc-time" style="color:#34d399">${arr.split(':')[0]}<span style="color:#34d399">:${arr.split(':')[1]}</span></span>
+        </div>
+      </div>
+
+      <!-- Price -->
+      <div class="sc-price-strip">
+        <span class="sc-price-label"><i class="fas fa-tag"></i> Price</span>
+        <span class="sc-price-val">${t.price}</span>
+        <span class="sc-price-cur">SYP</span>
+      </div>
+
+      <!-- Active days -->
+      <div class="sc-days">
+        <span class="sc-days-label">Days</span>
+        ${dayPillsHTML(t.activeDays)}
+      </div>
+
+      <!-- Footer -->
+      <div class="sc-footer">
+        <span class="sc-bus-tag"><i class="fas fa-bus"></i> ${t.busName || '—'}</span>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${t.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModal(${t.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${t.id},'${safeLabel}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  renderPagination('grid');
+}
+
+// ── TABLE RENDER ──────────────────────────────────────
+function renderTable() {
+  setLoading(false);
+  const wrap  = document.getElementById('tableWrap');
+  const empty = document.getElementById('listEmpty');
+  const pag   = document.getElementById('listPagination');
+
+  if (filteredTrips.length === 0) {
+    wrap.style.display  = 'none';
+    empty.style.display = 'flex';
+    pag.style.display   = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.style.display  = 'block';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredTrips.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('tripBody').innerHTML = page.map((t, i) => {
+    const joined    = t.createdOn
+      ? new Date(t.createdOn).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+      : '—';
+    const safeLabel = `#${t.id} — ${t.routeName || ''}`.replace(/'/g, "\\'");
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 20}ms">
+      <td><span class="id-badge">#${t.id}</span></td>
+      <td><span class="route-tag"><i class="fas fa-route"></i> ${t.routeName || '—'}</span></td>
+      <td>
+        <div class="time-inline">
+          <span class="time-badge dep"><i class="fas fa-plane-departure"></i> ${fmtTime(t.departureTime)}</span>
+          <i class="fas fa-arrow-right time-arrow"></i>
+          <span class="time-badge arr"><i class="fas fa-plane-arrival"></i> ${fmtTime(t.arrivalTime)}</span>
+        </div>
+      </td>
+      <td><span class="price-tag">${t.price} <small>SYP</small></span></td>
+      <td><div class="days-mini">${dayPillsHTML(t.activeDays, 'dot')}</div></td>
+      <td><span class="bus-tag"><i class="fas fa-bus"></i> ${t.busName || '—'}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn view"   title="View"   onclick="openViewModal(${t.id})"><i class="fas fa-eye"></i></button>
+          <button class="action-btn edit"   title="Edit"   onclick="openEditModal(${t.id})"><i class="fas fa-pen"></i></button>
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${t.id},'${safeLabel}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination('list');
+}
+
+function renderPagination(view) {
+  const total   = Math.ceil(filteredTrips.length / PAGE_SIZE);
+  const pagEl   = document.getElementById(view === 'grid' ? 'gridPagination' : 'listPagination');
+  const prevBtn = document.getElementById(view === 'grid' ? 'gridPrevBtn'   : 'listPrevBtn');
+  const nextBtn = document.getElementById(view === 'grid' ? 'gridNextBtn'   : 'listNextBtn');
+  const info    = document.getElementById(view === 'grid' ? 'gridPageInfo'  : 'listPageInfo');
+  pagEl.style.display = total > 1 ? 'flex' : 'none';
+  info.textContent    = `Page ${currentPage} of ${total}`;
+  prevBtn.disabled    = currentPage === 1;
+  nextBtn.disabled    = currentPage === total;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredTrips.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderContent();
+}
+
+function setLoading(loading) {
+  document.getElementById('gridLoading').style.display  = loading ? 'flex' : 'none';
+  document.getElementById('tableLoading').style.display = loading ? 'flex' : 'none';
+  if (loading) {
+    document.getElementById('schedulesGrid').style.display = 'none';
+    document.getElementById('gridEmpty').style.display     = 'none';
+    document.getElementById('tableWrap').style.display     = 'none';
+    document.getElementById('listEmpty').style.display     = 'none';
+  }
+}
+
+// ── VIEW MODAL ────────────────────────────────────────
+async function openViewModal(tripId) {
+  document.getElementById('viewModal').style.display   = 'flex';
+  document.getElementById('viewModalTitle').textContent = 'Loading...';
+  document.getElementById('viewModalSub').textContent   = `Schedule #${tripId}`;
+  document.getElementById('viewContent').innerHTML =
+    '<div class="modal-spinner"><div class="loading-spinner sm"></div></div>';
+
+  try {
+    const res  = await fetch(`/api/trip-schedules/${tripId}/`);
+    const data = await res.json();
+    const t    = data.result || data;
+
+    const dep    = fmtTime(t.departureTime);
+    const arr    = fmtTime(t.arrivalTime);
+    const dur    = calcDuration(t.departureTime, t.arrivalTime);
+    const joined = t.createdOn
+      ? new Date(t.createdOn).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })
+      : '—';
+
+    document.getElementById('viewModalTitle').textContent = t.routeName || `Schedule #${t.id}`;
+    document.getElementById('viewModalSub').textContent   = `Schedule #${t.id} · ${t.busName}`;
+
+    const activeDayNames = (t.activeDays || []).map(d => DAY_FULL[d]).join(', ');
+
+    document.getElementById('viewContent').innerHTML = `
+      <!-- Big time summary -->
+      <div class="trip-summary">
+        <div class="ts-dep">
+          <span class="ts-side-label"><i class="fas fa-plane-departure"></i> Departure</span>
+          <span class="ts-big-time">${dep}</span>
+        </div>
+        <div class="ts-mid">
+          <i class="fas fa-bus ts-mid-bus"></i>
+          <span class="ts-mid-dur">${dur}</span>
+          <span class="ts-mid-price">${t.price} SYP</span>
+        </div>
+        <div class="ts-arr">
+          <span class="ts-side-label"><i class="fas fa-plane-arrival"></i> Arrival</span>
+          <span class="ts-big-time">${arr}</span>
+        </div>
+      </div>
+
+      <!-- Days row -->
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:1.2rem;padding:10px 12px;
+                  background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.2);border-radius:12px;">
+        <span style="font-size:10px;font-weight:700;color:#8b5cf6;text-transform:uppercase;
+                     letter-spacing:.7px;margin-right:6px;display:flex;align-items:center;">
+          <i class="fas fa-calendar-week" style="margin-right:5px"></i>Active Days
+        </span>
+        ${dayPillsHTML(t.activeDays)}
+      </div>
+
+      <div class="info-rows">
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-hashtag"></i> ID</span>
+          <span class="info-value"><span class="id-badge">#${t.id}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-route"></i> Route</span>
+          <span class="info-value"><span class="route-tag"><i class="fas fa-route"></i> ${t.routeName || '—'}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-bus"></i> Default Bus</span>
+          <span class="info-value"><span class="bus-tag"><i class="fas fa-bus"></i> ${t.busName || '—'}</span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-clock"></i> Duration</span>
+          <span class="info-value">${dur}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-tag"></i> Price</span>
+          <span class="info-value"><span class="price-tag">${t.price} <small>SYP</small></span></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-calendar-check"></i> Active Days</span>
+          <span class="info-value" style="font-size:12px;text-align:right">${activeDayNames || '—'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label"><i class="fas fa-calendar-plus"></i> Created</span>
+          <span class="info-value">${joined}</span>
+        </div>
+      </div>`;
+
+    document.getElementById('viewEditBtn').onclick = () => {
+      closeModal('viewModal');
+      openEditModal(t.id, t);
+    };
+  } catch (err) {
+    document.getElementById('viewContent').innerHTML =
+      `<p style="color:#f87171;padding:1rem;text-align:center">Failed to load schedule details.</p>`;
+  }
+}
+
+// ── CREATE MODAL ──────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('cRouteId').value  = '';
+  document.getElementById('cBusId').value    = '';
+  document.getElementById('cDeparture').value = '';
+  document.getElementById('cArrival').value   = '';
+  document.getElementById('cPrice').value     = '';
+  document.getElementById('cDriverId').value = '';
+  ['cRouteErr','cBusErr','cDepErr','cArrErr','cPriceErr','cDaysErr']
+    .forEach(id => document.getElementById(id).textContent = '');
+  createSelectedDays.clear();
+  refreshDayPicker('create');
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+}
+
+async function submitCreate() {
+  const routeId  = document.getElementById('cRouteId').value;
+  const busId    = document.getElementById('cBusId').value;
+  const dep      = document.getElementById('cDeparture').value;
+  const arr      = document.getElementById('cArrival').value;
+  const price    = document.getElementById('cPrice').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(routeId, 'cRouteErr',  'Please select a route');
+  req(busId,   'cBusErr',    'Please select a bus');
+  req(dep,     'cDepErr',    'Departure time is required');
+  req(arr,     'cArrErr',    'Arrival time is required');
+  req(price,   'cPriceErr',  'Price is required');
+  if (createSelectedDays.size === 0) {
+    document.getElementById('cDaysErr').textContent = 'Select at least one active day';
+    valid = false;
+  } else {
+    document.getElementById('cDaysErr').textContent = '';
+  }
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/trip-schedules/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        busRouteId:    parseInt(routeId),
+        defaultBusId:  parseInt(busId),
+        departureTime: dep + ':00',
+        arrivalTime:   arr + ':00',
+        price:         parseFloat(price),
+        activeDays:    Array.from(createSelectedDays).sort(),
+        ...(document.getElementById('cDriverId').value
+            ? { driverId: parseInt(document.getElementById('cDriverId').value) }
+            : {}),
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast('Trip schedule created successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create schedule.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── EDIT MODAL ────────────────────────────────────────
+async function openEditModal(tripId, tripData) {
+  const t = tripData || allTrips.find(x => x.id === tripId);
+  if (!t) return;
+
+  document.getElementById('editTripId').value  = t.id;
+  document.getElementById('eBusId').value      = t.defaultBusId || '';
+  // time fields need "HH:MM" format — strip seconds
+  document.getElementById('eDeparture').value  = (t.departureTime || '').slice(0, 5);
+  document.getElementById('eArrival').value    = (t.arrivalTime   || '').slice(0, 5);
+  document.getElementById('ePrice').value      = t.price || '';
+  document.getElementById('editModalSub').textContent = `Schedule #${t.id} · ${t.routeName || ''}`;
+
+  ['eBusErr','eDepErr','eArrErr','ePriceErr','eDaysErr']
+    .forEach(id => document.getElementById(id).textContent = '');
+  setDays('edit', t.activeDays || []);
+
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+async function submitEdit() {
+  const id    = parseInt(document.getElementById('editTripId').value);
+  const busId = document.getElementById('eBusId').value;
+  const dep   = document.getElementById('eDeparture').value;
+  const arr   = document.getElementById('eArrival').value;
+  const price = document.getElementById('ePrice').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(busId, 'eBusErr',   'Please select a bus');
+  req(dep,   'eDepErr',   'Departure time is required');
+  req(arr,   'eArrErr',   'Arrival time is required');
+  req(price, 'ePriceErr', 'Price is required');
+  if (editSelectedDays.size === 0) {
+    document.getElementById('eDaysErr').textContent = 'Select at least one active day';
+    valid = false;
+  } else {
+    document.getElementById('eDaysErr').textContent = '';
+  }
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/trip-schedules/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({
+        id,
+        defaultBusId:  parseInt(busId),
+        departureTime: dep + ':00',
+        arrivalTime:   arr + ':00',
+        price:         parseFloat(price),
+        activeDays:    Array.from(editSelectedDays).sort(),
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast('Schedule updated successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update schedule.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── DELETE ────────────────────────────────────────────
+function openDeleteModal(tripId, label) {
+  pendingDeleteId = tripId;
+  document.getElementById('deleteLabel').textContent     = label;
+  document.getElementById('deleteModalSub').textContent  = `Schedule #${tripId}`;
+  document.getElementById('deleteError').style.display   = 'none';
+  document.getElementById('deleteModal').style.display   = 'flex';
+}
+
+async function submitDelete() {
+  if (!pendingDeleteId) return;
+  setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+  document.getElementById('deleteError').style.display = 'none';
+  try {
+    const res = await fetch(`/api/trip-schedules/delete/${pendingDeleteId}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast('Schedule deleted', 'error');
+      allTrips      = allTrips.filter(t => t.id !== pendingDeleteId);
+      filteredTrips = filteredTrips.filter(t => t.id !== pendingDeleteId);
+      renderContent(); updateKPIs();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete.';
+      document.getElementById('deleteError').style.display = 'flex';
+      document.getElementById('deleteErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('deleteError').style.display = 'flex';
+    document.getElementById('deleteErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+    pendingDeleteId = null;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled        = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+</script>
+{% endblock %}
