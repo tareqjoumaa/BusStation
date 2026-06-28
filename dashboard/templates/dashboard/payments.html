@@ -1,0 +1,837 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Payments — Bus Station{% endblock %}
+{% block breadcrumb %}Payments{% endblock %}
+{% block page_title %}Payments{% endblock %}
+{% block nav_payments %}active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/payments.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <div class="search-input-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="pmSearch" placeholder="Search by ID, booking, transaction..." />
+    </div>
+    <select class="filter-select" id="filterStatus">
+      <option value="">All Statuses</option>
+    </select>
+    <select class="filter-select" id="filterMethod">
+      <option value="">All Methods</option>
+    </select>
+    <select class="filter-select" id="filterDate">
+      <option value="">All Dates</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+    </button>
+    <button class="btn-primary" onclick="openCreateModal()">
+      <i class="fas fa-plus"></i> New Payment
+    </button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="api-error-banner" id="apiBanner" style="display:none">
+  <i class="fas fa-exclamation-circle"></i>
+  <span id="apiBannerMsg"></span>
+  <button onclick="this.closest('.api-error-banner').style.display='none'"><i class="fas fa-times"></i></button>
+</div>
+
+<!-- ── ACCOUNTANT SUMMARY STRIP ─────────────────────── -->
+<div class="pay-summary-strip" id="summaryStrip" style="display:none">
+  <div class="pay-summary-card" style="--kc:#6366f1">
+    <div class="psc-icon"><i class="fas fa-receipt"></i></div>
+    <div class="psc-body">
+      <span class="psc-val" id="sumTotal">0</span>
+      <span class="psc-label">Total Payments</span>
+    </div>
+  </div>
+  <div class="pay-summary-card" style="--kc:#10b981">
+    <div class="psc-icon"><i class="fas fa-check-circle"></i></div>
+    <div class="psc-body">
+      <span class="psc-val money" id="sumRevenue">0 SYP</span>
+      <span class="psc-label">Total Revenue</span>
+    </div>
+  </div>
+  <div class="pay-summary-card" style="--kc:#f59e0b">
+    <div class="psc-icon"><i class="fas fa-clock"></i></div>
+    <div class="psc-body">
+      <span class="psc-val" id="sumPending">0</span>
+      <span class="psc-label">Pending</span>
+    </div>
+  </div>
+  <div class="pay-summary-card" style="--kc:#34d399">
+    <div class="psc-icon"><i class="fas fa-coins"></i></div>
+    <div class="psc-body">
+      <span class="psc-val" id="sumCompleted">0</span>
+      <span class="psc-label">Completed</span>
+    </div>
+  </div>
+  <div class="pay-summary-card" style="--kc:#f43f5e">
+    <div class="psc-icon"><i class="fas fa-times-circle"></i></div>
+    <div class="psc-body">
+      <span class="psc-val" id="sumFailed">0</span>
+      <span class="psc-label">Failed</span>
+    </div>
+  </div>
+  <div class="pay-summary-card" style="--kc:#a5b4fc">
+    <div class="psc-icon"><i class="fas fa-undo"></i></div>
+    <div class="psc-body">
+      <span class="psc-val money" id="sumRefunded">0 SYP</span>
+      <span class="psc-label">Refunded</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── ANALYTICS ROW ────────────────────────────────── -->
+<div class="pay-analytics-row" id="analyticsRow" style="display:none">
+
+  <!-- Status breakdown -->
+  <div class="analytics-card">
+    <div class="analytics-title">
+      <i class="fas fa-chart-bar"></i> Status Breakdown
+    </div>
+    <div class="status-breakdown" id="statusBreakdown"></div>
+  </div>
+
+  <!-- Method breakdown -->
+  <div class="analytics-card">
+    <div class="analytics-title">
+      <i class="fas fa-credit-card"></i> Payment Methods
+    </div>
+    <div class="method-breakdown" id="methodBreakdown"></div>
+  </div>
+
+</div>
+
+<!-- ── PAYMENTS TABLE ────────────────────────────────── -->
+<div class="table-card">
+  <div class="table-loading" id="tableLoading">
+    <div class="loading-spinner"></div>
+    <span>Loading payments...</span>
+  </div>
+  <div class="table-scroll" id="tableWrap" style="display:none">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:65px">ID</th>
+          <th style="width:110px">Booking</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Method</th>
+          <th>Transaction ID</th>
+          <th>Created</th>
+          <th style="width:90px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="pmBody"></tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="empty-icon"><i class="fas fa-receipt"></i></div>
+    <h3 class="empty-title">No payments found</h3>
+    <p class="empty-desc">Try adjusting your filters or create a new payment.</p>
+    <button class="btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> New Payment</button>
+  </div>
+  <div class="pagination" id="paginationWrap" style="display:none">
+    <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="page-btn" id="nextBtn" onclick="changePage(1)"><i class="fas fa-chevron-right"></i></button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     CREATE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="createModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap create"><i class="fas fa-plus"></i></div>
+      <div>
+        <h3 class="modal-title">New Payment</h3>
+        <p class="modal-subtitle">Link a payment to a booking</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('createModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="createError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="createErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <div class="form-fields">
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-ticket-alt"></i> Booking <span class="req">*</span></label>
+          <select class="form-input" id="cBookingId">
+            <option value="">Select booking...</option>
+          </select>
+          <span class="form-field-error" id="cBookingErr"></span>
+        </div>
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-credit-card"></i> Payment Method <span class="req">*</span></label>
+          <select class="form-input" id="cMethodId">
+            <option value="">Select method...</option>
+          </select>
+          <span class="form-field-error" id="cMethodErr"></span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn-primary" id="createBtn" onclick="submitCreate()">
+        <span id="createBtnLabel"><i class="fas fa-plus"></i> Create Payment</span>
+        <span id="createBtnLoading" style="display:none"><span class="btn-spinner"></span> Creating...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     EDIT MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap edit"><i class="fas fa-pen"></i></div>
+      <div>
+        <h3 class="modal-title">Edit Payment</h3>
+        <p class="modal-subtitle" id="editModalSub">Update payment details</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-error" id="editError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="editErrorMsg"></span>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editPaymentId" />
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-info-circle"></i> Status <span class="req">*</span></label>
+          <select class="form-input" id="eStatusId">
+            <option value="">Select status...</option>
+          </select>
+          <span class="form-field-error" id="eStatusErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-credit-card"></i> Payment Method <span class="req">*</span></label>
+          <select class="form-input" id="eMethodId">
+            <option value="">Select method...</option>
+          </select>
+          <span class="form-field-error" id="eMethodErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-coins"></i> Amount <span class="req">*</span></label>
+          <input type="number" class="form-input" id="eAmount" placeholder="e.g. 1500" min="0" step="any" />
+          <span class="form-field-error" id="eAmountErr"></span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label"><i class="fas fa-fingerprint"></i> Transaction ID</label>
+          <input type="text" class="form-input" id="eTransactionId" placeholder="Optional transaction reference" autocomplete="off" />
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+      <button class="btn-primary" id="editBtn" onclick="submitEdit()">
+        <span id="editBtnLabel"><i class="fas fa-save"></i> Save Changes</span>
+        <span id="editBtnLoading" style="display:none"><span class="btn-spinner"></span> Saving...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     DELETE MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="deleteModal" style="display:none">
+  <div class="modal-box narrow">
+    <div class="modal-header">
+      <div class="modal-icon-wrap danger"><i class="fas fa-trash"></i></div>
+      <div>
+        <h3 class="modal-title">Delete Payment?</h3>
+        <p class="modal-subtitle" id="deleteModalSub">This cannot be undone.</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="delete-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>You are about to permanently delete payment <strong id="deleteLabel">—</strong>.</p>
+      </div>
+      <div class="modal-error" id="deleteError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
+        <i class="fas fa-exclamation-circle"></i><span id="deleteErrorMsg"></span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" onclick="submitDelete()">
+        <span id="deleteBtnLabel"><i class="fas fa-trash"></i> Delete</span>
+        <span id="deleteBtnLoading" style="display:none"><span class="btn-spinner"></span> Deleting...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ─────────────────────────────────────────────
+let allPayments      = [];
+let allMethods       = [];
+let allStatuses      = [];
+let allBookings      = [];
+let filteredPayments = [];
+let currentPage      = 1;
+const PAGE_SIZE      = 25;
+let pendingDeleteId  = null;
+
+// ── Toast ─────────────────────────────────────────────
+if (typeof showToast === 'undefined') {
+  window.showToast = (msg, type) => {
+    const e = document.getElementById('_pmToast'); if (e) e.remove();
+    const t = document.createElement('div'); t.id = '_pmToast';
+    const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;align-items:center;gap:10px;padding:14px 20px;border-radius:14px;background:${bg};color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 36px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.34,1.3,.64,1);`;
+    const ic = type === 'success' ? 'check-circle' : type === 'error' ? 'trash' : 'info-circle';
+    t.innerHTML = `<i class="fas fa-${ic}"></i><span>${msg}</span>`;
+    if (!document.getElementById('_tKF')) {
+      const s = document.createElement('style'); s.id = '_tKF';
+      s.textContent = '@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+  };
+}
+
+// ── Helpers ───────────────────────────────────────────
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function fmtDateOnly(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+function fmtAmount(a) {
+  return (a ?? 0).toLocaleString('en-US');
+}
+
+function statusCls(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('complet')) return 'completed';
+  if (n.includes('pending')) return 'pending';
+  if (n.includes('fail'))    return 'failed';
+  if (n.includes('refund'))  return 'refunded';
+  return 'unknown';
+}
+function methodCls(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('online') || n.includes('card') || n.includes('digital')) return 'online';
+  if (n.includes('cash'))  return 'cash';
+  return 'other';
+}
+function methodIcon(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('online') || n.includes('card')) return 'fa-credit-card';
+  if (n.includes('cash'))  return 'fa-money-bill-wave';
+  return 'fa-wallet';
+}
+function statusIcon(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('complet')) return 'fa-check-circle';
+  if (n.includes('pending')) return 'fa-clock';
+  if (n.includes('fail'))    return 'fa-times-circle';
+  if (n.includes('refund'))  return 'fa-undo';
+  return 'fa-question-circle';
+}
+function statusColor(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('complet')) return '#34d399';
+  if (n.includes('pending')) return '#fbbf24';
+  if (n.includes('fail'))    return '#fb7185';
+  if (n.includes('refund'))  return '#a5b4fc';
+  return 'rgba(255,255,255,.3)';
+}
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled        = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+
+// ── Table loading state ───────────────────────────────
+function setTableLoading(on) {
+  document.getElementById('tableLoading').style.display = on ? 'flex' : 'none';
+  if (on) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  document.getElementById('pmSearch').addEventListener('input', applyFilters);
+  ['filterStatus','filterMethod','filterDate'].forEach(id =>
+    document.getElementById(id).addEventListener('change', applyFilters)
+  );
+  document.querySelectorAll('.modal-overlay').forEach(o =>
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; })
+  );
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape')
+      document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  });
+});
+
+// ── Load ──────────────────────────────────────────────
+async function loadAll() {
+  setTableLoading(true);
+  document.getElementById('refreshIcon').classList.add('fa-spin');
+  try {
+    const [pmRes, methodsRes, statusesRes, bookingsRes] = await Promise.all([
+      fetch('/api/payments/'),
+      fetch('/api/payments/methods/'),
+      fetch('/api/payments/statuses/'),
+      fetch('/api/payments/bookings/'),
+    ]);
+    const pmData       = await pmRes.json();
+    const methodsData  = await methodsRes.json();
+    const statusesData = await statusesRes.json();
+    const bookingsData = await bookingsRes.json();
+
+    if (!pmRes.ok) throw new Error(pmData.error || 'HTTP ' + pmRes.status);
+
+    allPayments = Array.isArray(pmData.result)       ? pmData.result       : Array.isArray(pmData)       ? pmData       : [];
+    allMethods  = Array.isArray(methodsData.result)  ? methodsData.result  : Array.isArray(methodsData)  ? methodsData  : [];
+    allStatuses = Array.isArray(statusesData.result) ? statusesData.result : Array.isArray(statusesData) ? statusesData : [];
+    allBookings = Array.isArray(bookingsData.result) ? bookingsData.result : Array.isArray(bookingsData) ? bookingsData : [];
+
+    // Newest first
+    allPayments.sort((a, b) => b.id - a.id);
+
+    buildFilterDropdowns();
+    populateFormDropdowns();
+    applyFilters();
+
+    document.getElementById('summaryStrip').style.display  = 'grid';
+    document.getElementById('analyticsRow').style.display  = 'grid';
+    document.getElementById('apiBanner').style.display     = 'none';
+
+    renderSummary();
+    renderAnalytics();
+
+  } catch (err) {
+    document.getElementById('apiBanner').style.display  = 'flex';
+    document.getElementById('apiBannerMsg').textContent = 'Failed to load payments: ' + err.message;
+    setTableLoading(false);
+  } finally {
+    document.getElementById('refreshIcon').classList.remove('fa-spin');
+  }
+}
+
+// ── Build filter dropdowns ────────────────────────────
+function buildFilterDropdowns() {
+  // Status filter
+  const stSel = document.getElementById('filterStatus');
+  stSel.innerHTML = '<option value="">All Statuses</option>';
+  allStatuses.forEach(s => {
+    const o = document.createElement('option'); o.value = s.id; o.textContent = s.name;
+    stSel.appendChild(o);
+  });
+
+  // Method filter
+  const mSel = document.getElementById('filterMethod');
+  mSel.innerHTML = '<option value="">All Methods</option>';
+  allMethods.filter(m => m.isActive).forEach(m => {
+    const o = document.createElement('option'); o.value = m.id; o.textContent = m.name;
+    mSel.appendChild(o);
+  });
+
+  // Date filter — unique dates from payments
+  const dates = [...new Set(allPayments.map(p => fmtDateOnly(p.createdOn)).filter(Boolean))];
+  const dSel  = document.getElementById('filterDate');
+  dSel.innerHTML = '<option value="">All Dates</option>';
+  dates.forEach(d => {
+    const o = document.createElement('option'); o.value = d; o.textContent = d;
+    dSel.appendChild(o);
+  });
+}
+
+function populateFormDropdowns() {
+  // Create: bookings dropdown
+  const bSel = document.getElementById('cBookingId');
+  bSel.innerHTML = '<option value="">Select booking...</option>';
+  allBookings.forEach(b => {
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = `#${b.id}${b.code ? ' — ' + b.code : ''} (Trip #${b.tripInstanceId})`;
+    bSel.appendChild(o);
+  });
+
+  // Create: methods
+  const cmSel = document.getElementById('cMethodId');
+  cmSel.innerHTML = '<option value="">Select method...</option>';
+  allMethods.filter(m => m.isActive).forEach(m => {
+    const o = document.createElement('option'); o.value = m.id; o.textContent = m.name;
+    cmSel.appendChild(o);
+  });
+
+  // Edit: statuses
+  const eSel = document.getElementById('eStatusId');
+  eSel.innerHTML = '<option value="">Select status...</option>';
+  allStatuses.forEach(s => {
+    const o = document.createElement('option'); o.value = s.id; o.textContent = s.name;
+    eSel.appendChild(o);
+  });
+
+  // Edit: methods
+  const emSel = document.getElementById('eMethodId');
+  emSel.innerHTML = '<option value="">Select method...</option>';
+  allMethods.filter(m => m.isActive).forEach(m => {
+    const o = document.createElement('option'); o.value = m.id; o.textContent = m.name;
+    emSel.appendChild(o);
+  });
+}
+
+// ── Summary strip ─────────────────────────────────────
+function renderSummary() {
+  const completed = allPayments.filter(p => (p.statusName||'').toLowerCase().includes('complet'));
+  const pending   = allPayments.filter(p => (p.statusName||'').toLowerCase().includes('pending'));
+  const failed    = allPayments.filter(p => (p.statusName||'').toLowerCase().includes('fail'));
+  const refunded  = allPayments.filter(p => (p.statusName||'').toLowerCase().includes('refund'));
+  const revenue   = completed.reduce((s, p) => s + (p.amount || 0), 0);
+  const refAmt    = refunded.reduce((s, p)  => s + (p.amount || 0), 0);
+
+  document.getElementById('sumTotal').textContent     = allPayments.length;
+  document.getElementById('sumRevenue').textContent   = fmtAmount(revenue) + ' SYP';
+  document.getElementById('sumPending').textContent   = pending.length;
+  document.getElementById('sumCompleted').textContent = completed.length;
+  document.getElementById('sumFailed').textContent    = failed.length;
+  document.getElementById('sumRefunded').textContent  = fmtAmount(refAmt) + ' SYP';
+}
+
+// ── Analytics breakdown ───────────────────────────────
+function renderAnalytics() {
+  const total = allPayments.length || 1;
+
+  // Status breakdown
+  const statusMap = {};
+  allPayments.forEach(p => {
+    const n = p.statusName || 'Unknown';
+    statusMap[n] = (statusMap[n] || 0) + 1;
+  });
+  document.getElementById('statusBreakdown').innerHTML = Object.entries(statusMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => {
+      const pct = Math.round((count / total) * 100);
+      const col = statusColor(name);
+      return `
+      <div class="sb-row">
+        <div class="sb-header">
+          <span class="sb-label">
+            <span class="sb-label-dot" style="background:${col}"></span>
+            ${name}
+          </span>
+          <span class="sb-count">${count} <span style="color:var(--text-mute);font-weight:400">(${pct}%)</span></span>
+        </div>
+        <div class="sb-bar-track">
+          <div class="sb-bar-fill" style="width:${pct}%;background:${col}"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+  // Method breakdown
+  const methodMap = {};
+  allPayments.forEach(p => {
+    const n   = p.paymentMethodName || 'Unknown';
+    const amt = p.amount || 0;
+    if (!methodMap[n]) methodMap[n] = { count: 0, amount: 0, id: p.paymentMethodId };
+    methodMap[n].count++;
+    methodMap[n].amount += amt;
+  });
+  document.getElementById('methodBreakdown').innerHTML = Object.entries(methodMap)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, data]) => {
+      const cls  = methodCls(name);
+      const icon = methodIcon(name);
+      return `
+      <div class="mb-row">
+        <div class="mb-icon ${cls}"><i class="fas ${icon}"></i></div>
+        <div class="mb-info">
+          <span class="mb-name">${name}</span>
+          <span class="mb-amount">${fmtAmount(data.amount)} SYP total</span>
+        </div>
+        <span class="mb-count">${data.count}</span>
+      </div>`;
+    }).join('');
+}
+
+// ── Filters ───────────────────────────────────────────
+function applyFilters() {
+  const q      = document.getElementById('pmSearch').value.toLowerCase().trim();
+  const status = document.getElementById('filterStatus').value;
+  const method = document.getElementById('filterMethod').value;
+  const date   = document.getElementById('filterDate').value;
+
+  filteredPayments = allPayments.filter(p => {
+    const text     = `#${p.id} #${p.bookingId} ${p.transactionId || ''}`.toLowerCase();
+    const statusOk = !status || String(p.statusId)          === status;
+    const methodOk = !method || String(p.paymentMethodId)   === method;
+    const dateOk   = !date   || fmtDateOnly(p.createdOn)    === date;
+    return (!q || text.includes(q)) && statusOk && methodOk && dateOk;
+  });
+  currentPage = 1;
+  renderTable();
+}
+
+// ── Render table ──────────────────────────────────────
+function renderTable() {
+  setTableLoading(false);
+  if (filteredPayments.length === 0) {
+    document.getElementById('tableWrap').style.display      = 'none';
+    document.getElementById('emptyState').style.display     = 'flex';
+    document.getElementById('paginationWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableWrap').style.display  = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredPayments.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('pmBody').innerHTML = page.map((p, i) => {
+    const sCls    = statusCls(p.statusName);
+    const sIcon   = statusIcon(p.statusName);
+    const mCls    = methodCls(p.paymentMethodName);
+    const mIcon   = methodIcon(p.paymentMethodName);
+    const created = fmtDateTime(p.createdOn);
+    const isZero  = !p.amount || p.amount === 0;
+
+    return `
+    <tr class="anim-row" style="--row-delay:${i * 12}ms">
+      <td><span class="id-badge">#${p.id}</span></td>
+      <td>
+        <span class="booking-link" onclick="void(0)" title="Booking #${p.bookingId}">
+          <i class="fas fa-ticket-alt" style="font-size:9px"></i> #${p.bookingId}
+        </span>
+      </td>
+      <td>
+        <span class="amount-val ${isZero ? 'zero' : ''}">${isZero ? '—' : fmtAmount(p.amount)}</span>
+        ${!isZero ? `<span class="amount-cur">SYP</span>` : ''}
+      </td>
+      <td>
+        <span class="pay-status ${sCls}">
+          <i class="fas ${sIcon}"></i> ${p.statusName || '—'}
+        </span>
+      </td>
+      <td>
+        <span class="method-badge ${mCls}">
+          <i class="fas ${mIcon}"></i> ${p.paymentMethodName || '—'}
+        </span>
+      </td>
+      <td>
+        ${p.transactionId
+          ? `<span class="txn-id">${p.transactionId}</span>`
+          : `<span style="color:var(--text-mute);font-size:12px;font-style:italic">—</span>`}
+      </td>
+      <td><span class="date-text">${created}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="action-btn delete" title="Delete" onclick="openDeleteModal(${p.id})"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalPages = Math.ceil(filteredPayments.length / PAGE_SIZE);
+  document.getElementById('paginationWrap').style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('pageInfo').textContent         = `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('prevBtn').disabled             = currentPage === 1;
+  document.getElementById('nextBtn').disabled             = currentPage === totalPages;
+}
+
+function changePage(dir) {
+  const total = Math.ceil(filteredPayments.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, currentPage + dir));
+  renderTable();
+}
+
+// ── CREATE MODAL ──────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('cBookingId').value = '';
+  document.getElementById('cMethodId').value  = '';
+  ['cBookingErr','cMethodErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('createError').style.display = 'none';
+  document.getElementById('createModal').style.display = 'flex';
+}
+
+async function submitCreate() {
+  const bookingId = document.getElementById('cBookingId').value;
+  const methodId  = document.getElementById('cMethodId').value;
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(bookingId, 'cBookingErr', 'Please select a booking');
+  req(methodId,  'cMethodErr',  'Please select a payment method');
+  if (!valid) return;
+
+  setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', true);
+  document.getElementById('createError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/payments/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({ bookingId: parseInt(bookingId), paymentMethodId: parseInt(methodId) }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('createModal');
+      showToast('Payment created successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create payment.';
+      document.getElementById('createError').style.display = 'flex';
+      document.getElementById('createErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('createError').style.display = 'flex';
+    document.getElementById('createErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
+  }
+}
+
+// ── EDIT MODAL ────────────────────────────────────────
+function openEditModal(paymentId) {
+  const p = allPayments.find(x => x.id === paymentId);
+  if (!p) return;
+
+  document.getElementById('editPaymentId').value    = p.id;
+  document.getElementById('eStatusId').value        = p.statusId        || '';
+  document.getElementById('eMethodId').value        = p.paymentMethodId || '';
+  document.getElementById('eAmount').value          = p.amount          || '';
+  document.getElementById('eTransactionId').value   = p.transactionId   || '';
+  document.getElementById('editModalSub').textContent = `Payment #${p.id} · Booking #${p.bookingId}`;
+  ['eStatusErr','eMethodErr','eAmountErr'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('editError').style.display = 'none';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+async function submitEdit() {
+  const id            = parseInt(document.getElementById('editPaymentId').value);
+  const statusId      = document.getElementById('eStatusId').value;
+  const methodId      = document.getElementById('eMethodId').value;
+  const amount        = document.getElementById('eAmount').value;
+  const transactionId = document.getElementById('eTransactionId').value.trim();
+
+  let valid = true;
+  const req = (val, errId, msg) => {
+    if (!val && val !== 0) { document.getElementById(errId).textContent = msg; valid = false; }
+    else document.getElementById(errId).textContent = '';
+  };
+  req(statusId, 'eStatusErr', 'Please select a status');
+  req(methodId, 'eMethodErr', 'Please select a payment method');
+  req(amount,   'eAmountErr', 'Amount is required');
+  if (!valid) return;
+
+  setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', true);
+  document.getElementById('editError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/payments/update/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({
+        id,
+        statusId:        parseInt(statusId),
+        paymentMethodId: parseInt(methodId),
+        amount:          parseFloat(amount),
+        transactionId:   transactionId,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('editModal');
+      showToast('Payment updated successfully', 'success');
+      loadAll();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to update payment.';
+      document.getElementById('editError').style.display = 'flex';
+      document.getElementById('editErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('editError').style.display = 'flex';
+    document.getElementById('editErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('editBtn', 'editBtnLabel', 'editBtnLoading', false);
+  }
+}
+
+// ── DELETE ────────────────────────────────────────────
+function openDeleteModal(paymentId) {
+  pendingDeleteId = paymentId;
+  document.getElementById('deleteLabel').textContent     = `#${paymentId}`;
+  document.getElementById('deleteModalSub').textContent  = `Payment #${paymentId}`;
+  document.getElementById('deleteError').style.display   = 'none';
+  document.getElementById('deleteModal').style.display   = 'flex';
+}
+
+async function submitDelete() {
+  if (!pendingDeleteId) return;
+  setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', true);
+  document.getElementById('deleteError').style.display = 'none';
+  try {
+    const res = await fetch(`/api/payments/delete/${pendingDeleteId}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      closeModal('deleteModal');
+      showToast('Payment deleted', 'error');
+      allPayments      = allPayments.filter(p => p.id !== pendingDeleteId);
+      filteredPayments = filteredPayments.filter(p => p.id !== pendingDeleteId);
+      renderTable();
+      renderSummary();
+      renderAnalytics();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to delete.';
+      document.getElementById('deleteError').style.display = 'flex';
+      document.getElementById('deleteErrorMsg').textContent = msg;
+    }
+  } catch (err) {
+    document.getElementById('deleteError').style.display = 'flex';
+    document.getElementById('deleteErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('deleteBtn', 'deleteBtnLabel', 'deleteBtnLoading', false);
+    pendingDeleteId = null;
+  }
+}
+</script>
+{% endblock %}

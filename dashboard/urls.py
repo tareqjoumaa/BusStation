@@ -19,7 +19,7 @@ from . import trip_schedules_views
 from . import trip_instances_views
 from . import bookings_views
 from . import trip_detail_views
-
+from . import payments_views
 
 app_name = "dashboard"
 
@@ -172,4 +172,15 @@ urlpatterns = [
     path("api/trip-detail/drivers/",                  trip_detail_views.get_drivers,       name="get_drivers"),
     path("api/trip-detail/assign-driver/",            trip_detail_views.assign_driver,     name="assign_driver"),
 
+
+    # ── Payments ─────────────────────────────────────────────────────────────────
+
+    path("payments/",                              payments_views.payments_page,           name="payments"),
+    path("api/payments/",                          payments_views.get_payments,            name="get_payments"),
+    path("api/payments/methods/",                  payments_views.get_payment_methods,     name="get_payment_methods"),
+    path("api/payments/statuses/",                 payments_views.get_payment_statuses,    name="get_payment_statuses"),
+    path("api/payments/bookings/",                 payments_views.get_bookings_for_payments, name="get_bookings_for_payments"),
+    path("api/payments/create/",                   payments_views.create_payment,          name="create_payment"),
+    path("api/payments/update/",                   payments_views.update_payment,          name="update_payment"),
+    path("api/payments/delete/<int:payment_id>/",  payments_views.delete_payment,          name="delete_payment"),
 ]

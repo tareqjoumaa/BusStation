@@ -52,7 +52,10 @@ def login_view(request):
                 and result.get('token'):
 
             result = data['result']
+            permissions = get_user_permissions(result['token'])
+            
             request.session['bs_token']     = result['token']
+            request.session['bs_permissions'] = permissions
             request.session['bs_role'] = ','.join(result.get('role') or [])
             request.session['bs_user_type'] = str(result.get('userTypeId', ''))
             request.session['bs_phone']     = phone_number
@@ -114,3 +117,24 @@ def get_auth_headers(request):
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     }
+
+
+def get_user_permissions(token):
+    try:
+        response = requests.get(
+            f"{API_BASE}/GetCurrentUserPermissios",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "*/*",
+            },
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("result", [])
+
+    except Exception:
+        pass
+
+    return []
