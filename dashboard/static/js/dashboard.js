@@ -160,3 +160,35 @@ if (globalSearch) {
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => showToast('Dashboard loaded successfully', 'success', 2500), 600);
 });
+
+const THEME = (() => {
+  const STORAGE_KEY = 'bs_theme';
+  const btn  = () => document.getElementById('themeToggleBtn');
+  const icon = () => document.getElementById('themeIcon');
+
+  function apply(mode) {
+    const isLight = mode === 'light';
+    document.body.classList.toggle('light', isLight);
+    if (icon()) {
+      icon().className = isLight ? 'fas fa-moon' : 'fas fa-sun';
+    }
+    if (btn()) {
+      btn().title = isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode';
+    }
+    localStorage.setItem(STORAGE_KEY, mode);
+  }
+
+  function toggle() {
+    const current = document.body.classList.contains('light') ? 'light' : 'dark';
+    apply(current === 'light' ? 'dark' : 'light');
+  }
+
+  function init() {
+    const saved = localStorage.getItem(STORAGE_KEY) || 'dark';
+    apply(saved);
+  }
+
+  return { toggle, init };
+})();
+
+document.addEventListener('DOMContentLoaded', () => THEME.init());
