@@ -24,6 +24,7 @@ const TRANSLATIONS = {
     nav_bookings:         'Bookings',
     nav_payments:         'Payments',
     nav_fleet:            'Fleet',
+    nav_trip_settings:    'Trip Settings',
     nav_company:          'Company',
     nav_bus_owners:       'Bus Owners',
     nav_bus_companies:    'Bus Companies',
@@ -216,6 +217,7 @@ const TRANSLATIONS = {
     nav_bookings:         'الحجوزات',
     nav_payments:         'المدفوعات',
     nav_fleet:            'الأسطول',
+    nav_trip_settings:    'إعدادات الرحلات',
     nav_company:          'الشركة',
     nav_bus_owners:       'ملاك الباصات',
     nav_bus_companies:    'شركات الباص',
@@ -274,7 +276,7 @@ const TRANSLATIONS = {
     th_code:              'الكود',
     th_user:              'المستخدم',
     th_trip_departure:    'الرحلة / الموعد',
-    th_checked:           'مُسجَّل',
+    th_checked:           'تم الصعود',
     modal_new_booking:    'حجز جديد',
     modal_booking_sub:    'اختر رحلة وأضف المقاعد',
     label_trip:           'رحلة',
@@ -373,6 +375,27 @@ const TRANSLATIONS = {
     modal_edit_schedule:  'تعديل الجدول',
     modal_delete_schedule:'حذف الجدول؟',
 
+        // في قسم الـ en (English)
+    modal_pay_title:   'Pay Booking',
+    btn_pay:           'Pay Now',
+    select_method:     'Select method...',
+    payment_success:   'Payment created successfully',
+    already_paid:      'Already paid — click to view',
+    already_paid_msg:  'This booking already has a completed payment.',
+    already_paid_warn: 'Booking already has payment',
+    already_paid_retry:'Creating another will make a duplicate.',
+
+    // في قسم الـ ar (Arabic)
+    modal_pay_title:   'دفع الحجز',
+    btn_pay:           'ادفع الآن',
+    select_method:     'اختر طريقة الدفع...',
+    payment_success:   'تم إنشاء الدفعة بنجاح',
+    already_paid:      'مدفوع مسبقاً — اضغط للعرض',
+    already_paid_msg:  'هذا الحجز لديه دفعة مكتملة مسبقاً.',
+    already_paid_warn: 'الحجز لديه دفعة موجودة',
+    already_paid_retry:'إنشاء دفعة أخرى سيسبب تكراراً.',
+
+    
     // ── Employees page ───────────────────────────────────
     page_employees:       'إدارة الموظفين',
     kpi_total_employees:  'إجمالي الموظفين',

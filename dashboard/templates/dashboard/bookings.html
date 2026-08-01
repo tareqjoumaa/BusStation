@@ -20,7 +20,7 @@
       <input type="text" id="bkSearch" data-i18n-placeholder="search_bookings" placeholder="Search by code, user, trip..." />
     </div>
     <select class="filter-select" id="filterStatus">
-      <option value=""        data-i18n="filter_all_statuses">All Statuses</option>
+      <option value=""          data-i18n="filter_all_statuses">All Statuses</option>
       <option value="confirmed" data-i18n="filter_confirmed">Confirmed</option>
       <option value="reserved"  data-i18n="filter_reserved">Reserved</option>
       <option value="cancelled" data-i18n="filter_cancelled">Cancelled</option>
@@ -100,14 +100,14 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th style="width:60px" data-i18n="th_id">ID</th>
+          <th style="width:60px"  data-i18n="th_id">ID</th>
           <th data-i18n="th_user">User</th>
           <th data-i18n="th_trip_departure">Trip / Departure</th>
           <th data-i18n="th_status">Status</th>
           <th data-i18n="th_price">Price</th>
           <th data-i18n="th_checked">Checked</th>
           <th data-i18n="th_created">Created</th>
-          <th style="width:120px" data-i18n="th_actions">Actions</th>
+          <th style="width:140px" data-i18n="th_actions">Actions</th>
         </tr>
       </thead>
       <tbody id="bkBody"></tbody>
@@ -116,7 +116,7 @@
   <div class="empty-state" id="emptyState" style="display:none">
     <div class="empty-icon"><i class="fas fa-ticket-alt"></i></div>
     <h3 class="empty-title" data-i18n="no_results_title">No results found</h3>
-    <p class="empty-desc" data-i18n="no_results_desc">Try adjusting your search or filters.</p>
+    <p class="empty-desc"  data-i18n="no_results_desc">Try adjusting your search or filters.</p>
     <button class="btn-primary" onclick="openCreateModal()">
       <i class="fas fa-plus"></i> <span data-i18n="btn_new_booking">New Booking</span>
     </button>
@@ -149,7 +149,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('viewModal')" data-i18n="btn_close">Close</button>
-      <button class="btn-warn" id="vmEditBtn"><i class="fas fa-pen"></i> <span data-i18n="btn_edit">Edit</span></button>
+      <button class="btn-warn"   id="vmEditBtn"><i class="fas fa-pen"></i> <span data-i18n="btn_edit">Edit</span></button>
       <button class="btn-danger" id="vmCancelBtn"><i class="fas fa-ban"></i> <span data-i18n="btn_cancel">Cancel</span></button>
     </div>
   </div>
@@ -187,7 +187,6 @@
           <span class="form-field-error" id="cTripErr"></span>
         </div>
 
-        <!-- Available seats dropdown — populated after trip selected -->
         <div class="form-field" id="cSeatFieldWrap" style="display:none">
           <label class="form-label">
             <i class="fas fa-chair"></i>
@@ -201,7 +200,6 @@
           </button>
         </div>
 
-        <!-- Dynamic seat rows -->
         <div class="seat-rows" id="cSeatRows"></div>
 
       </div>
@@ -252,7 +250,6 @@
           <span class="form-field-error" id="eStatusErr"></span>
         </div>
 
-        <!-- Existing seat rows from booking -->
         <div id="eSeatsSection">
           <div style="font-size:11px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">
             <i class="fas fa-users"></i> <span data-i18n="modal_passengers">Passengers</span>
@@ -289,9 +286,7 @@
     <div class="modal-body">
       <div class="cancel-warning">
         <i class="fas fa-exclamation-triangle"></i>
-        <p id="cancelWarningText">
-          <!-- built dynamically in openCancelModal() -->
-        </p>
+        <p id="cancelWarningText"></p>
       </div>
       <div class="modal-error" id="cancelError" style="display:none;margin-top:.8rem;margin-left:0;margin-right:0">
         <i class="fas fa-exclamation-circle"></i><span id="cancelErrorMsg"></span>
@@ -307,11 +302,78 @@
   </div>
 </div>
 
+
+<!-- ══════════════════════════════════════════════════
+     PAY MODAL
+════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="payModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon-wrap pay"><i class="fas fa-money-bill-wave"></i></div>
+      <div>
+        <h3 class="modal-title" data-i18n="modal_pay_title">Pay Booking</h3>
+        <p class="modal-subtitle" id="payModalSub">—</p>
+      </div>
+      <button class="modal-close" onclick="closeModal('payModal')"><i class="fas fa-times"></i></button>
+    </div>
+
+    <!-- Already-paid warning -->
+    <div class="already-paid-banner" id="alreadyPaidBanner" style="display:none">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span id="alreadyPaidBannerMsg"></span>
+    </div>
+
+    <div class="modal-error" id="payError" style="display:none">
+      <i class="fas fa-exclamation-circle"></i><span id="payErrorMsg"></span>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-fields">
+
+        <div class="form-field">
+          <label class="form-label">
+            <i class="fas fa-credit-card"></i>
+            <span data-i18n="label_payment_method">Payment Method</span>
+            <span class="req">*</span>
+          </label>
+          <select class="form-input" id="payMethodId">
+            <option value="" data-i18n="select_method">Select method...</option>
+          </select>
+          <span class="form-field-error" id="payMethodErr"></span>
+        </div>
+
+        <!-- Booking summary -->
+        <div class="pay-summary-row" id="paySummaryRow" style="display:none">
+          <div class="pay-sum-item">
+            <span class="pay-sum-label" data-i18n="th_trip_departure">Trip</span>
+            <span class="pay-sum-val" id="payTripVal">—</span>
+          </div>
+          <div class="pay-sum-item">
+            <span class="pay-sum-label" data-i18n="th_price">Total</span>
+            <span class="pay-sum-val price" id="payPriceVal">—</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('payModal')" data-i18n="btn_close">Close</button>
+      <button class="btn-pay" id="payBtn" onclick="submitPay()">
+        <span id="payBtnLabel"><i class="fas fa-money-bill-wave"></i> <span data-i18n="btn_pay">Pay Now</span></span>
+        <span id="payBtnLoading" style="display:none"><span class="btn-spinner"></span> <span data-i18n="loading_generic">Loading...</span></span>
+      </button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// ── State ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
 let allBookings      = [];
 let allTrips         = [];
 let filteredBookings = [];
@@ -321,7 +383,15 @@ let pendingCancelId  = null;
 let availableSeats   = [];
 let seatRowCount     = 0;
 
-// ── Toast ─────────────────────────────────────────────
+// Pay modal state
+let payMethodsList   = [];
+let pendingPayBookId = null;
+// Cache: bookingId → payment object (populated after first check)
+const paidBookingsCache = {};
+
+// ═══════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════
 if (typeof showToast === 'undefined') {
   window.showToast = (msg, type) => {
     const e = document.getElementById('_bkToast'); if (e) e.remove();
@@ -336,11 +406,13 @@ if (typeof showToast === 'undefined') {
       document.head.appendChild(s);
     }
     document.body.appendChild(t);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+    setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3200);
   };
 }
 
-// ── Init ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   loadAll();
   document.getElementById('bkSearch').addEventListener('input', applyFilters);
@@ -356,25 +428,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ── Language change — re-render dynamic content ────────
+// Re-render on language change
 document.addEventListener('langchange', () => {
-  // Re-render table rows (checked yes/no text changes)
   if (filteredBookings.length) renderTable();
-  // Refresh trip dropdown placeholder
   populateTripDropdown();
-  // Refresh seat picker placeholder text if visible
   const picker = document.getElementById('cSeatPicker');
-  if (picker && picker.options[0] && picker.options[0].value === '') {
-    picker.options[0].textContent = I18N.t('label_pick_seat');
-  }
-  // Refresh date filter placeholder
+  if (picker?.options[0]?.value === '') picker.options[0].textContent = I18N.t('label_pick_seat');
   const dateFilter = document.getElementById('filterDate');
-  if (dateFilter && dateFilter.options[0] && dateFilter.options[0].value === '') {
-    dateFilter.options[0].textContent = I18N.t('filter_all_dates');
-  }
+  if (dateFilter?.options[0]?.value === '') dateFilter.options[0].textContent = I18N.t('filter_all_dates');
 });
 
-// ── Load all ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  LOAD ALL
+// ═══════════════════════════════════════════════════════
 async function loadAll() {
   setTableLoading(true);
   document.getElementById('refreshIcon').classList.add('fa-spin');
@@ -411,7 +477,6 @@ async function loadAll() {
 function buildDateFilter() {
   const dates = [...new Set(allBookings.map(b => fmtDateOnly(b.departureTime)).filter(Boolean))].sort();
   const sel   = document.getElementById('filterDate');
-  // Keep the "All Dates" option translated
   sel.innerHTML = `<option value="">${I18N.t('filter_all_dates')}</option>`;
   dates.forEach(d => {
     const o = document.createElement('option'); o.value = d; o.textContent = d;
@@ -423,8 +488,8 @@ function populateTripDropdown() {
   const sel = document.getElementById('cTripId');
   sel.innerHTML = `<option value="">${I18N.t('select_trip')}</option>`;
   allTrips.forEach(t => {
-    const o = document.createElement('option');
-    o.value = t.id;
+    const o   = document.createElement('option');
+    o.value   = t.id;
     const dep = t.departureTime
       ? new Date(t.departureTime).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
       : '';
@@ -433,7 +498,9 @@ function populateTripDropdown() {
   });
 }
 
-// ── Filters ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  FILTERS
+// ═══════════════════════════════════════════════════════
 function applyFilters() {
   const q       = document.getElementById('bkSearch').value.toLowerCase().trim();
   const status  = document.getElementById('filterStatus').value.toLowerCase();
@@ -452,7 +519,9 @@ function applyFilters() {
   updateKPIs();
 }
 
-// ── KPIs ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  KPIs
+// ═══════════════════════════════════════════════════════
 function updateKPIs() {
   const confirmed = allBookings.filter(b => (b.statusName || '').toLowerCase().includes('confirm')).length;
   const cancelled = allBookings.filter(b => (b.statusName || '').toLowerCase().includes('cancel')).length;
@@ -462,7 +531,9 @@ function updateKPIs() {
   document.getElementById('statShowing').textContent   = filteredBookings.length;
 }
 
-// ── Helpers ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
 function fmtDateOnly(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
@@ -471,7 +542,6 @@ function fmtDateTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
 }
-
 function statusInfo(name) {
   const n = (name || '').toLowerCase();
   if (n.includes('confirm')) return { cls:'confirmed', label: I18N.t('status_confirmed'), icon:'check-double' };
@@ -480,8 +550,27 @@ function statusInfo(name) {
   if (n.includes('pending')) return { cls:'pending',   label: I18N.t('filter_pending'),   icon:'clock' };
   return { cls:'unknown', label: name || 'Unknown', icon:'question-circle' };
 }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function setBtnLoading(btnId, labelId, loadId, loading) {
+  document.getElementById(btnId).disabled        = loading;
+  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
+  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+}
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+function setTableLoading(on) {
+  document.getElementById('tableLoading').style.display = on ? 'flex' : 'none';
+  if (on) {
+    document.getElementById('tableWrap').style.display  = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+  }
+}
 
-// ── Render table ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  RENDER TABLE
+// ═══════════════════════════════════════════════════════
 function renderTable() {
   setTableLoading(false);
   if (filteredBookings.length === 0) {
@@ -500,11 +589,20 @@ function renderTable() {
     const st      = statusInfo(b.statusName);
     const created = fmtDateTime(b.createdOn);
     const dep     = fmtDateTime(b.departureTime);
+    // Check local cache for paid status
+    const isPaid  = !!paidBookingsCache[b.id];
+    const payTitle = isPaid
+      ? (I18N.t('already_paid') || 'Already paid — click to view')
+      : (I18N.t('btn_pay')     || 'Pay');
 
     return `
     <tr class="anim-row" style="--row-delay:${i * 15}ms">
       <td><span class="id-badge">#${b.id}</span></td>
-      <td><span class="user-tag" title="${b.userName || ''}"><i class="fas fa-user"></i> ${b.userName || '—'}</span></td>
+      <td>
+        <span class="user-tag" title="${b.userName || ''}">
+          <i class="fas fa-user"></i> ${b.userName || '—'}
+        </span>
+      </td>
       <td>
         <div style="display:flex;flex-direction:column;gap:3px">
           <span class="trip-tag"><i class="fas fa-bus"></i> Trip #${b.tripInstanceId}</span>
@@ -521,9 +619,26 @@ function renderTable() {
       <td><span class="date-text">${created}</span></td>
       <td>
         <div class="action-btns">
-          <button class="action-btn view"   title="${I18N.t('btn_edit')}"   onclick="openViewModal(${b.id})"><i class="fas fa-eye"></i></button>
-          <button class="action-btn edit"   title="${I18N.t('btn_edit')}"   onclick="openEditModal(${b.id})"><i class="fas fa-pen"></i></button>
-          <button class="action-btn cancel" title="${I18N.t('btn_cancel')}" onclick="openCancelModal(${b.id},'${(b.code||'#'+b.id).replace(/'/g,"\\'")}')"><i class="fas fa-ban"></i></button>
+          <button class="action-btn view"
+            title="${I18N.t('btn_view') || 'View'}"
+            onclick="openViewModal(${b.id})">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="action-btn edit"
+            title="${I18N.t('btn_edit')}"
+            onclick="openEditModal(${b.id})">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="action-btn pay ${isPaid ? 'paid' : ''}"
+            title="${payTitle}"
+            onclick="openPayModal(${b.id})">
+            <i class="fas fa-money-bill-wave"></i>
+          </button>
+          <button class="action-btn cancel"
+            title="${I18N.t('btn_cancel')}"
+            onclick="openCancelModal(${b.id},'${(b.code||'#'+b.id).replace(/'/g,"\\'")}')">
+            <i class="fas fa-ban"></i>
+          </button>
         </div>
       </td>
     </tr>`;
@@ -542,15 +657,9 @@ function changePage(dir) {
   renderTable();
 }
 
-function setTableLoading(on) {
-  document.getElementById('tableLoading').style.display = on ? 'flex' : 'none';
-  if (on) {
-    document.getElementById('tableWrap').style.display  = 'none';
-    document.getElementById('emptyState').style.display = 'none';
-  }
-}
-
-// ── VIEW MODAL ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  VIEW MODAL
+// ═══════════════════════════════════════════════════════
 async function openViewModal(bookingId) {
   document.getElementById('viewModal').style.display = 'flex';
   document.getElementById('vmTitle').textContent     = I18N.t('loading_generic');
@@ -652,7 +761,9 @@ async function openViewModal(bookingId) {
   }
 }
 
-// ── CREATE MODAL ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  CREATE MODAL
+// ═══════════════════════════════════════════════════════
 function openCreateModal() {
   document.getElementById('cTripId').value                = '';
   document.getElementById('cSeatFieldWrap').style.display = 'none';
@@ -733,13 +844,15 @@ function addSeatRow() {
         <label class="form-label">
           <i class="fas fa-user"></i> ${I18N.t('label_passenger_name')} <span class="req">*</span>
         </label>
-        <input type="text" class="form-input" id="sr_name_${rowId}"  placeholder="${I18N.t('label_passenger_name')}" autocomplete="off" />
+        <input type="text" class="form-input" id="sr_name_${rowId}"
+          placeholder="${I18N.t('label_passenger_name')}" autocomplete="off" />
       </div>
       <div class="form-field">
         <label class="form-label">
           <i class="fas fa-phone"></i> ${I18N.t('label_phone')} <span class="req">*</span>
         </label>
-        <input type="text" class="form-input" id="sr_phone_${rowId}" placeholder="09XXXXXXXX" autocomplete="off" />
+        <input type="text" class="form-input" id="sr_phone_${rowId}"
+          placeholder="09XXXXXXXX" autocomplete="off" />
       </div>
     </div>`;
   document.getElementById('cSeatRows').appendChild(row);
@@ -790,7 +903,8 @@ async function submitCreate() {
 
   if (!valid) {
     document.getElementById('createError').style.display = 'flex';
-    document.getElementById('createErrorMsg').textContent = I18N.t('label_passenger_name') + ' / ' + I18N.t('label_phone');
+    document.getElementById('createErrorMsg').textContent =
+      I18N.t('label_passenger_name') + ' / ' + I18N.t('label_phone');
     return;
   }
 
@@ -807,7 +921,10 @@ async function submitCreate() {
     if (res.ok && !data.hasErrors) {
       closeModal('createModal');
       const code = data.result?.code || '';
-      showToast(`${I18N.t('btn_create_booking')}${code ? ' — ' + I18N.t('booking_code_label') + ': ' + code : ''}`, 'success');
+      showToast(
+        `${I18N.t('btn_create_booking')}${code ? ' — ' + I18N.t('booking_code_label') + ': ' + code : ''}`,
+        'success'
+      );
       loadAll();
     } else {
       const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create booking.';
@@ -822,7 +939,9 @@ async function submitCreate() {
   }
 }
 
-// ── EDIT MODAL ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  EDIT MODAL
+// ═══════════════════════════════════════════════════════
 async function openEditModal(bookingId, bookingData) {
   let b = bookingData;
   if (!b) {
@@ -835,7 +954,8 @@ async function openEditModal(bookingId, bookingData) {
 
   document.getElementById('editBookingId').value      = b.id;
   document.getElementById('eStatusId').value          = b.statusId || '';
-  document.getElementById('editModalSub').textContent = `Booking #${b.id}${b.code ? ' · ' + b.code : ''}`;
+  document.getElementById('editModalSub').textContent =
+    `Booking #${b.id}${b.code ? ' · ' + b.code : ''}`;
 
   const rows = document.getElementById('eSeatRows');
   rows.innerHTML = (b.seats || []).map(s => `
@@ -843,7 +963,7 @@ async function openEditModal(bookingId, bookingData) {
       <div class="seat-row-header">
         <span class="seat-row-label"><i class="fas fa-chair"></i> ${I18N.t('seat_label')} ${s.seatNumber}</span>
       </div>
-      <input type="hidden" class="e-seat-id"        value="${s.id}" />
+      <input type="hidden" class="e-seat-id"         value="${s.id}" />
       <input type="hidden" class="e-seat-tripSeatId" value="${s.tripSeatId}" />
       <div class="seat-row-fields">
         <div class="form-field">
@@ -910,15 +1030,16 @@ async function submitEdit() {
   }
 }
 
-// ── CANCEL ────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  CANCEL MODAL
+// ═══════════════════════════════════════════════════════
 function openCancelModal(bookingId, label) {
   pendingCancelId = bookingId;
-  // Build the warning sentence using i18n keys so it reads naturally in both langs
   document.getElementById('cancelWarningText').innerHTML =
     `${I18N.t('cancel_warn')} <strong>${label}</strong>. ${I18N.t('cancel_warn2')}`;
-  document.getElementById('cancelModalSub').textContent  = `Booking #${bookingId}`;
-  document.getElementById('cancelError').style.display   = 'none';
-  document.getElementById('cancelModal').style.display   = 'flex';
+  document.getElementById('cancelModalSub').textContent = `Booking #${bookingId}`;
+  document.getElementById('cancelError').style.display  = 'none';
+  document.getElementById('cancelModal').style.display  = 'flex';
 }
 
 async function submitCancel() {
@@ -949,18 +1070,148 @@ async function submitCancel() {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+// ═══════════════════════════════════════════════════════
+//  PAY MODAL
+// ═══════════════════════════════════════════════════════
+async function openPayModal(bookingId) {
+  pendingPayBookId = bookingId;
+  const booking    = allBookings.find(b => b.id === bookingId);
 
-function setBtnLoading(btnId, labelId, loadId, loading) {
-  document.getElementById(btnId).disabled        = loading;
-  document.getElementById(labelId).style.display = loading ? 'none'        : 'inline-flex';
-  document.getElementById(loadId).style.display  = loading ? 'inline-flex' : 'none';
+  // Reset UI
+  document.getElementById('payModal').style.display          = 'flex';
+  document.getElementById('payError').style.display          = 'none';
+  document.getElementById('alreadyPaidBanner').style.display = 'none';
+  document.getElementById('payMethodErr').textContent        = '';
+  document.getElementById('payMethodId').value               = '';
+  document.getElementById('paySummaryRow').style.display     = 'none';
+  document.getElementById('payBtn').disabled                 = false;
+
+  // Subtitle
+  document.getElementById('payModalSub').textContent =
+    `Booking #${bookingId}${booking?.code ? ' · ' + booking.code : ''}`;
+
+  // Booking summary strip
+  if (booking) {
+    document.getElementById('payTripVal').textContent  = `Trip #${booking.tripInstanceId}`;
+    document.getElementById('payPriceVal').textContent = `${booking.totalPrice ?? 0} SYP`;
+    document.getElementById('paySummaryRow').style.display = 'grid';
+  }
+
+  // Load payment methods once, then cache
+  if (payMethodsList.length === 0) {
+    document.getElementById('payMethodId').innerHTML =
+      `<option value="">${I18N.t('loading_generic') || 'Loading...'}</option>`;
+    try {
+      const res  = await fetch('/api/payments/methods/');
+      const data = await res.json();
+      payMethodsList = Array.isArray(data.result) ? data.result
+                     : Array.isArray(data)        ? data : [];
+    } catch {
+      payMethodsList = [];
+    }
+  }
+
+  // Populate method dropdown
+  const picker = document.getElementById('payMethodId');
+  picker.innerHTML = `<option value="">${I18N.t('select_method') || 'Select method...'}</option>`;
+  payMethodsList.filter(m => m.isActive).forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id; o.textContent = m.name;
+    picker.appendChild(o);
+  });
+
+  // Check if already paid — use cache first, then fetch
+  if (paidBookingsCache[bookingId]) {
+    showAlreadyPaidWarning(paidBookingsCache[bookingId]);
+  } else {
+    // Async check — don't block the modal opening
+    checkExistingPayment(bookingId);
+  }
 }
 
-function getCookie(name) {
-  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
-  return v ? v[2] : '';
+async function checkExistingPayment(bookingId) {
+  try {
+    const res  = await fetch('/api/payments/');
+    const data = await res.json();
+    const payments = Array.isArray(data.result) ? data.result
+                   : Array.isArray(data)        ? data : [];
+
+    // Find a non-failed, non-cancelled payment for this booking
+    const existing = payments.find(p =>
+      p.bookingId === bookingId &&
+      !(p.statusName || '').toLowerCase().includes('fail') &&
+      !(p.statusName || '').toLowerCase().includes('cancel')
+    );
+
+    if (existing) {
+      // Cache it so next click is instant
+      paidBookingsCache[bookingId] = existing;
+      // Only show warning if this modal is still open for the same booking
+      if (pendingPayBookId === bookingId &&
+          document.getElementById('payModal').style.display !== 'none') {
+        showAlreadyPaidWarning(existing);
+        // Re-render table row to reflect paid state
+        renderTable();
+      }
+    }
+  } catch {
+    // Silent — user can still attempt payment; API will reject if duplicate
+  }
+}
+
+function showAlreadyPaidWarning(payment) {
+  const banner = document.getElementById('alreadyPaidBanner');
+  const status = payment.statusName ? ` (${payment.statusName})` : '';
+  banner.querySelector('#alreadyPaidBannerMsg').innerHTML =
+    `${I18N.t('already_paid_warn') || 'This booking already has a payment'} ` +
+    `<strong>#${payment.id}</strong>${status}. ` +
+    `${I18N.t('already_paid_retry') || 'Proceeding will create a duplicate payment.'}`;
+  banner.style.display = 'flex';
+}
+
+async function submitPay() {
+  const methodId = document.getElementById('payMethodId').value;
+  if (!methodId) {
+    document.getElementById('payMethodErr').textContent =
+      I18N.t('select_method') || 'Please select a payment method';
+    return;
+  }
+  document.getElementById('payMethodErr').textContent = '';
+
+  setBtnLoading('payBtn', 'payBtnLabel', 'payBtnLoading', true);
+  document.getElementById('payError').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/payments/create/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body:    JSON.stringify({
+        bookingId:       pendingPayBookId,
+        paymentMethodId: parseInt(methodId),
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && !data.hasErrors) {
+      // Cache the new payment
+      if (data.result) paidBookingsCache[pendingPayBookId] = data.result;
+      closeModal('payModal');
+      showToast(
+        `${I18N.t('payment_success') || 'Payment created'} — Booking #${pendingPayBookId}`,
+        'success'
+      );
+      // Re-render so the pay button turns green immediately
+      renderTable();
+    } else {
+      const msg = data.validationErrors?.[0]?.description || data.error || 'Failed to create payment.';
+      document.getElementById('payError').style.display = 'flex';
+      document.getElementById('payErrorMsg').textContent = msg;
+    }
+  } catch {
+    document.getElementById('payError').style.display = 'flex';
+    document.getElementById('payErrorMsg').textContent = 'Network error. Please try again.';
+  } finally {
+    setBtnLoading('payBtn', 'payBtnLabel', 'payBtnLoading', false);
+  }
 }
 </script>
 {% endblock %}
