@@ -1667,3 +1667,278 @@ body.light .nav-label       { color: inherit; }
 body.light .id-badge        { color: var(--accent); }
 body.light .price-tag       { color: #0891b2; }
 body.light .country-tag     { color: var(--text-sec); }
+
+/* ── Light Mode — Modal & Form Fields ── */
+body.light .modal-box {
+  background: #ffffff;
+  border-color: var(--border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+}
+
+body.light .modal-header {
+  border-bottom-color: var(--border);
+}
+
+body.light .modal-title {
+  color: var(--text);
+}
+
+body.light .modal-subtitle {
+  color: var(--text-mute);
+}
+
+body.light .modal-body {
+  background: #ffffff;
+}
+
+body.light .modal-actions {
+  border-top-color: var(--border);
+  background: #f8faff;
+}
+
+/* Form inputs inside modals */
+body.light .form-input,
+body.light select.form-input,
+body.light input.form-input,
+body.light textarea.form-input {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+body.light .form-input:focus,
+body.light select.form-input:focus,
+body.light input.form-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+body.light .form-input::placeholder {
+  color: var(--text-mute) !important;
+}
+
+/* select dropdown arrow & option background */
+body.light select.form-input option {
+  background: #ffffff;
+  color: var(--text);
+}
+
+body.light .form-label {
+  color: var(--text-sec);
+}
+
+body.light .form-label i {
+  color: var(--accent);
+}
+
+body.light .form-field-error {
+  color: var(--red);
+}
+
+body.light .req {
+  color: var(--red);
+}
+
+/* Seat rows inside modals */
+body.light .seat-row {
+  background: #f8faff;
+  border-color: var(--border);
+}
+
+body.light .seat-row-header {
+  background: #f0f4ff;
+  border-bottom-color: var(--border);
+}
+
+body.light .seat-row-label {
+  color: var(--text-sec);
+}
+
+body.light .seat-row-remove {
+  color: var(--text-mute);
+}
+
+body.light .seat-row-remove:hover {
+  background: rgba(239,68,68,0.1);
+  color: var(--red);
+}
+
+body.light .add-seat-btn {
+  background: rgba(59,130,246,0.08);
+  border-color: rgba(59,130,246,0.3);
+  color: var(--accent);
+}
+
+body.light .add-seat-btn:hover {
+  background: rgba(59,130,246,0.15);
+}
+
+/* Modal error banner */
+body.light .modal-error {
+  background: rgba(239,68,68,0.08);
+  border-color: rgba(239,68,68,0.3);
+  color: #dc2626;
+}
+
+/* Modal icon wraps */
+body.light .modal-icon-wrap {
+  background: rgba(59,130,246,0.1);
+  color: var(--accent);
+}
+
+body.light .modal-icon-wrap.create {
+  background: rgba(16,185,129,0.12);
+  color: var(--green);
+}
+
+body.light .modal-icon-wrap.edit {
+  background: rgba(245,158,11,0.12);
+  color: var(--amber);
+}
+
+body.light .modal-icon-wrap.danger {
+  background: rgba(239,68,68,0.12);
+  color: var(--red);
+}
+
+body.light .modal-icon-wrap.view {
+  background: rgba(59,130,246,0.12);
+  color: var(--accent);
+}
+
+body.light .modal-icon-wrap.pay {
+  background: rgba(16,185,129,0.12);
+  color: var(--green);
+}
+
+/* Cancel & warning boxes */
+body.light .cancel-warning {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.3);
+  color: #92400e;
+}
+
+body.light .cancel-warning i {
+  color: var(--amber);
+}
+
+/* Already-paid banner */
+body.light .already-paid-banner {
+  background: rgba(245,158,11,0.10);
+  border-color: rgba(245,158,11,0.35);
+  color: #92400e;
+}
+
+/* Pay summary strip inside modal */
+body.light .pay-sum-item {
+  background: #f8faff;
+  border-color: var(--border);
+}
+
+body.light .pay-sum-label {
+  color: var(--text-mute);
+}
+
+body.light .pay-sum-val {
+  color: var(--text);
+}
+
+body.light .pay-sum-val.price {
+  color: #0891b2;
+}
+
+/* Booking ticket inside view modal */
+body.light .booking-ticket {
+  background: #f8faff;
+  border-color: var(--border);
+}
+
+body.light .bt-top {
+  border-bottom-color: var(--border);
+}
+
+body.light .bt-code-label {
+  color: var(--text-mute);
+}
+
+body.light .bt-code-val {
+  color: var(--text);
+}
+
+body.light .bt-trip-route {
+  color: var(--accent);
+}
+
+body.light .bt-trip-time {
+  color: var(--text-mute);
+}
+
+body.light .bt-stat-label {
+  color: var(--text-mute);
+}
+
+body.light .bt-stat-val {
+  color: var(--text);
+}
+
+body.light .bt-divider {
+  background: var(--border);
+}
+
+/* Passenger card inside view modal */
+body.light .passenger-card {
+  background: #f8faff;
+  border-color: var(--border);
+}
+
+body.light .passenger-seat {
+  background: rgba(59,130,246,0.1);
+  color: var(--accent);
+}
+
+body.light .passenger-name {
+  color: var(--text);
+}
+
+body.light .passenger-phone {
+  color: var(--text-mute);
+}
+
+/* info-rows inside modals */
+body.light .info-rows .info-row {
+  border-bottom-color: var(--border);
+}
+
+/* Modal overlay backdrop — slightly lighter in light mode */
+body.light .modal-overlay {
+  background: rgba(30,42,69,0.5);
+}
+
+/* API error banner */
+body.light .api-error-banner {
+  background: rgba(239,68,68,0.08);
+  border-color: rgba(239,68,68,0.3);
+  color: #dc2626;
+}
+
+/* KPI cards in bookings */
+body.light .bk-kpi-row .kpi-card {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+body.light .kpi-val {
+  color: var(--text);
+}
+
+/* Empty state */
+body.light .empty-state {
+  color: var(--text-mute);
+}
+
+body.light .empty-title {
+  color: var(--text);
+}
+
+body.light .empty-icon {
+  color: var(--border-light);
+}

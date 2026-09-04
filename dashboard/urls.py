@@ -29,7 +29,7 @@ urlpatterns = [
     path("logout/", login_view.logout_view, name="logout"),
 
     # ── Pages ────────────────────────────
-    path("", views.home, name="home"),
+    path("", bookings_views.bookings_page, name="bookings"),
     path("reservations/", views.reservations, name="reservations"),
     path("reservations/<int:booking_id>/", views.reservation_detail, name="reservation_detail"),
     path("offices/", views.offices, name="offices"),

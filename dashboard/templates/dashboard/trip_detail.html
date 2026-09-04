@@ -8,6 +8,25 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/trip_detail.css' %}">
+<style>
+.passenger-toggle-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;
+  font-size:12.5px;font-weight:700;border:1px solid rgba(244,63,94,.35);
+  background:rgba(244,63,94,.1);color:#f43f5e;cursor:pointer;transition:all .2s ease;white-space:nowrap;
+}
+.passenger-toggle-btn:hover{background:rgba(244,63,94,.18);transform:translateY(-1px);}
+.passenger-toggle-btn.active{background:#f43f5e;color:#fff;border-color:#f43f5e;}
+.passenger-table-wrap{width:100%;}
+.passenger-table-scroll{width:100%;overflow-x:auto;border-radius:12px;border:1px solid rgba(255,255,255,.08);}
+.passenger-empty{padding:2.4rem;text-align:center;color:var(--text-mute);font-size:13px;}
+.pdf-download-btn{
+  display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;
+  font-size:13px;font-weight:700;border:none;background:linear-gradient(135deg,#f43f5e,#e11d48);
+  color:#fff;cursor:pointer;margin-top:14px;transition:all .2s ease;box-shadow:0 6px 18px rgba(244,63,94,.3);
+}
+.pdf-download-btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(244,63,94,.4);}
+.pdf-download-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -52,11 +71,14 @@
             <div class="detail-card-sub" id="busSubLabel">Hover a seat for details</div>
           </div>
           <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+            <button class="passenger-toggle-btn" id="passengerToggleBtn" onclick="togglePassengerView()">
+              <i class="fas fa-users" id="toggleIcon"></i> <span id="toggleLabel">View Passenger List</span>
+            </button>
             <div class="loading-spinner sm" id="seatSpinner"></div>
           </div>
         </div>
         <div class="detail-card-body" style="display:flex;justify-content:center">
-          <div class="bus-wrap">
+          <div class="bus-wrap" id="busWrap">
             <div class="bus-shell" id="busShell">
               <!-- Built by JS -->
             </div>
@@ -69,6 +91,35 @@
                 <span class="legend-swatch resv"></span> Reserved
               </div>
             </div>
+          </div>
+
+          <!-- Passenger table (hidden until toggled) -->
+          <div class="passenger-table-wrap" id="passengerTableWrap" style="display:none">
+            <div class="passenger-table-scroll">
+              <table class="data-table" id="passengerTable">
+                <thead>
+                  <tr>
+                    <th>Seat</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Father Name</th>
+                    <th>Mother Name</th>
+                    <th>Date of Birth</th>
+                    <th>National Number</th>
+                    <th>Phone</th>
+                    <th>Reserved Until</th>
+                  </tr>
+                </thead>
+                <tbody id="passengerTableBody"></tbody>
+              </table>
+            </div>
+            <div class="passenger-empty" id="passengerEmpty" style="display:none">
+              <i class="fas fa-user-slash" style="font-size:22px;margin-bottom:8px;display:block"></i>
+              No passengers on this trip yet.
+            </div>
+            <button class="pdf-download-btn" id="pdfBtn" onclick="exportPassengerPDF()">
+              <i class="fas fa-file-pdf"></i> Download PDF
+            </button>
           </div>
         </div>
       </div>
@@ -143,6 +194,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 const TRIP_ID = {{ trip_id }};
 let tripData  = null;
@@ -201,6 +254,7 @@ async function loadPage() {
     renderInfoRows();
     renderSeatStats();
     renderBus();
+    renderPassengerTable();
     renderDriverPanel();
 
     document.getElementById('pageLoading').style.display  = 'none';
@@ -441,16 +495,16 @@ function renderBus() {
 }
 
 function seatHTML(s) {
-  const avail   = s.seatStatusId === 1;
-  const cls     = avail ? 'avail' : 'resv';
-  const pName   = s.passengerName       ? ` data-passenger="${s.passengerName}"` : '';
-  const pPhone  = s.passengerPhoneNumber? ` data-phone="${s.passengerPhoneNumber}"` : '';
-  const until   = s.reservedUntil       ? ` data-until="${s.reservedUntil}"` : '';
+  const avail    = s.seatStatusId === 1;
+  const cls      = avail ? 'avail' : 'resv';
+  const fullName = [s.firstName, s.lastName].filter(Boolean).join(' ');
+  const pName    = fullName ? ` data-passenger="${fullName}"` : '';
+  const until    = s.reservedUntil ? ` data-until="${s.reservedUntil}"` : '';
   return `<div class="seat ${cls}"
     data-seat="${s.busSeatName}"
     data-status="${s.seatStatusName}"
     data-avail="${avail}"
-    ${pName}${pPhone}${until}
+    ${pName}${until}
     title="Seat ${s.busSeatName}">
     <div class="seat-back"></div>
     <span class="seat-num">${s.busSeatName}</span>
@@ -470,7 +524,6 @@ function showSeatTooltip(e) {
   let extra = '';
   if (!avail) {
     if (el.dataset.passenger) extra += `<div><i class="fas fa-user" style="margin-right:4px"></i>${el.dataset.passenger}</div>`;
-    if (el.dataset.phone)     extra += `<div><i class="fas fa-phone" style="margin-right:4px"></i>${el.dataset.phone}</div>`;
     if (el.dataset.until) {
       const d = new Date(el.dataset.until);
       extra += `<div><i class="fas fa-clock" style="margin-right:4px"></i>Until ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</div>`;
@@ -485,6 +538,157 @@ function showSeatTooltip(e) {
 
 function hideSeatTooltip() {
   document.getElementById('seatTooltip').classList.remove('visible');
+}
+
+// ── Render passenger table ────────────────────────────
+function renderPassengerTable() {
+  const seats  = seatsData?.seats || [];
+  const booked = seats.filter(s => s.seatStatusId !== 1);
+
+  const tbody    = document.getElementById('passengerTableBody');
+  const emptyEl  = document.getElementById('passengerEmpty');
+  const scrollEl = document.querySelector('.passenger-table-scroll');
+  const pdfBtn   = document.getElementById('pdfBtn');
+
+  if (booked.length === 0) {
+    scrollEl.style.display = 'none';
+    pdfBtn.style.display   = 'none';
+    emptyEl.style.display  = 'block';
+    return;
+  }
+  scrollEl.style.display = 'block';
+  pdfBtn.style.display   = 'inline-flex';
+  emptyEl.style.display  = 'none';
+
+  tbody.innerHTML = booked.map(s => `
+    <tr>
+      <td><span class="id-badge">#${s.busSeatName}</span></td>
+      <td>${s.firstName || '—'}</td>
+      <td>${s.lastName || '—'}</td>
+      <td>${s.fatherName || '—'}</td>
+      <td>${s.motherName || '—'}</td>
+      <td>${s.dateOfBirth || '—'}</td>
+      <td>${s.nationalNumber || '—'}</td>
+      <td>${s.passengerPhoneNumber || '—'}</td>
+      <td>${s.reservedUntil ? fmtDT(s.reservedUntil) : '—'}</td>
+    </tr>`).join('');
+}
+
+// ── Toggle bus map / passenger table ──────────────────
+function togglePassengerView() {
+  const busWrap   = document.getElementById('busWrap');
+  const tableWrap = document.getElementById('passengerTableWrap');
+  const btn       = document.getElementById('passengerToggleBtn');
+  const icon      = document.getElementById('toggleIcon');
+  const label     = document.getElementById('toggleLabel');
+
+  const showingTable = tableWrap.style.display !== 'none';
+
+  if (showingTable) {
+    tableWrap.style.display = 'none';
+    busWrap.style.display   = '';
+    btn.classList.remove('active');
+    icon.className = 'fas fa-users';
+    label.textContent = 'View Passenger List';
+  } else {
+    busWrap.style.display   = 'none';
+    tableWrap.style.display = 'block';
+    btn.classList.add('active');
+    icon.className = 'fas fa-bus';
+    label.textContent = 'Back to Seat Map';
+  }
+}
+
+// ── Export passenger list as PDF ──────────────────────
+function exportPassengerPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+
+  const t = tripData;
+  const seats  = seatsData?.seats || [];
+  const avail  = seats.filter(s => s.seatStatusId === 1).length;
+  const resv   = seats.filter(s => s.seatStatusId !== 1).length;
+  const st     = statusInfo(t.tripStatusId, t.tripStatusName);
+
+  // Route name — same source used by the hero card (URL query param)
+  const params    = new URLSearchParams(window.location.search);
+  const routeName = params.get('route') || '';
+  let fromName = 'Departure', toName = 'Arrival';
+  if (routeName) {
+    const parts = routeName.split(' - ');
+    fromName = parts[0] || routeName;
+    toName   = parts[1] || '';
+  }
+
+  // Try common field names for company name — adjust here if the real field differs
+  const companyName = t.busCompanyName || t.companyName || t.busCompany || null;
+
+  // ── Header ──
+  doc.setFontSize(16);
+  doc.setTextColor(244, 63, 94);
+  doc.text(companyName ? companyName : 'Bus Station', 14, 15);
+
+  doc.setFontSize(11);
+  doc.setTextColor(30, 30, 30);
+  doc.text(`Trip #${t.id} — Passenger List`, 14, 23);
+
+  // ── Trip info grid (two columns of label/value) ──
+  const info = [
+    ['Route',       routeName ? `${fromName}  →  ${toName}` : '—'],
+    ['Status',      st.label],
+    ['Date',        fmtDate(t.departureTime)],
+    ['Departure',   fmtTime(t.departureTime)],
+    ['Arrival',     fmtTime(t.arrivalTime)],
+    ['Bus',         t.busName || '—'],
+    ['Driver',      t.driverName || 'Not assigned'],
+    ['Schedule ID', `#${t.tripScheduleId}`],
+    ['Total Seats', `${seats.length}`],
+    ['Available',   `${avail}`],
+    ['Reserved',    `${resv}`],
+  ];
+
+  doc.autoTable({
+    startY: 28,
+    theme: 'plain',
+    styles: { fontSize: 9, cellPadding: 1.2 },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [120, 120, 120], cellWidth: 28 },
+      1: { textColor: [20, 20, 20] },
+      2: { fontStyle: 'bold', textColor: [120, 120, 120], cellWidth: 28 },
+      3: { textColor: [20, 20, 20] },
+    },
+    body: [
+      [info[0][0], info[0][1], info[1][0], info[1][1]],
+      [info[2][0], info[2][1], info[3][0], info[3][1]],
+      [info[4][0], info[4][1], info[5][0], info[5][1]],
+      [info[6][0], info[6][1], info[7][0], info[7][1]],
+      [info[8][0], info[8][1], info[9][0], info[9][1]],
+      [info[10][0], info[10][1], '', ''],
+    ],
+  });
+
+  // ── Passenger table ──
+  const booked = seats.filter(s => s.seatStatusId !== 1);
+  const rows = booked.map(s => [
+    s.busSeatName,
+    s.firstName || '—',
+    s.lastName || '—',
+    s.fatherName || '—',
+    s.motherName || '—',
+    s.dateOfBirth || '—',
+    s.nationalNumber || '—',
+    s.passengerPhoneNumber || '—',
+  ]);
+
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 8,
+    head: [['Seat','First Name','Last Name','Father Name','Mother Name','Date of Birth','National No.','Phone']],
+    body: rows,
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [244, 63, 94] },
+  });
+
+  doc.save(`trip-${t.id}-passengers.pdf`);
 }
 
 // ── Render driver panel ───────────────────────────────
