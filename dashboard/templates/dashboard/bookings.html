@@ -842,10 +842,44 @@ function addSeatRow() {
     <div class="seat-row-fields">
       <div class="form-field">
         <label class="form-label">
-          <i class="fas fa-user"></i> ${I18N.t('label_passenger_name')} <span class="req">*</span>
+          <i class="fas fa-user"></i> ${I18N.t('label_first_name') || 'First Name'} <span class="req">*</span>
         </label>
-        <input type="text" class="form-input" id="sr_name_${rowId}"
-          placeholder="${I18N.t('label_passenger_name')}" autocomplete="off" />
+        <input type="text" class="form-input" id="sr_firstName_${rowId}"
+          placeholder="${I18N.t('label_first_name') || 'First Name'}" autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">
+          <i class="fas fa-user"></i> ${I18N.t('label_last_name') || 'Last Name'} <span class="req">*</span>
+        </label>
+        <input type="text" class="form-input" id="sr_lastName_${rowId}"
+          placeholder="${I18N.t('label_last_name') || 'Last Name'}" autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">
+          <i class="fas fa-user"></i> ${I18N.t('label_father_name') || 'Father Name'}
+        </label>
+        <input type="text" class="form-input" id="sr_fatherName_${rowId}"
+          placeholder="${I18N.t('label_father_name') || 'Father Name'}" autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">
+          <i class="fas fa-user"></i> ${I18N.t('label_mother_name') || 'Mother Name'}
+        </label>
+        <input type="text" class="form-input" id="sr_motherName_${rowId}"
+          placeholder="${I18N.t('label_mother_name') || 'Mother Name'}" autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">
+          <i class="fas fa-calendar-alt"></i> ${I18N.t('label_dob') || 'Date of Birth'}
+        </label>
+        <input type="date" class="form-input" id="sr_dob_${rowId}" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">
+          <i class="fas fa-id-card"></i> ${I18N.t('label_national_number') || 'National Number'}
+        </label>
+        <input type="text" class="form-input" id="sr_nationalNumber_${rowId}"
+          placeholder="${I18N.t('label_national_number') || 'National Number'}" autocomplete="off" />
       </div>
       <div class="form-field">
         <label class="form-label">
@@ -875,6 +909,7 @@ function removeSeatRow(rowId) {
   }
 }
 
+
 async function submitCreate() {
   const tripId = document.getElementById('cTripId').value;
   if (!tripId) {
@@ -893,18 +928,36 @@ async function submitCreate() {
   const seats = [];
   let valid = true;
   seatRows.forEach(row => {
-    const rowId  = row.id.replace('seatRow_', '');
-    const seatId = document.getElementById(`sr_seatId_${rowId}`)?.value;
-    const name   = document.getElementById(`sr_name_${rowId}`)?.value.trim();
-    const phone  = document.getElementById(`sr_phone_${rowId}`)?.value.trim();
-    if (!name || !phone) { valid = false; return; }
-    seats.push({ tripSeatId: parseInt(seatId), passengerName: name, passengerPhoneNumber: phone });
+    const rowId         = row.id.replace('seatRow_', '');
+    const seatId        = document.getElementById(`sr_seatId_${rowId}`)?.value;
+    const firstName      = document.getElementById(`sr_firstName_${rowId}`)?.value.trim();
+    const lastName        = document.getElementById(`sr_lastName_${rowId}`)?.value.trim();
+    const fatherName      = document.getElementById(`sr_fatherName_${rowId}`)?.value.trim();
+    const motherName      = document.getElementById(`sr_motherName_${rowId}`)?.value.trim();
+    const dob             = document.getElementById(`sr_dob_${rowId}`)?.value;
+    const nationalNumber  = document.getElementById(`sr_nationalNumber_${rowId}`)?.value.trim();
+    const phone            = document.getElementById(`sr_phone_${rowId}`)?.value.trim();
+
+    if (!firstName || !lastName || !phone) { valid = false; return; }
+
+    seats.push({
+      tripSeatId:           parseInt(seatId),
+      firstName:            firstName,
+      lastName:             lastName,
+      fatherName:           fatherName || '',
+      motherName:           motherName || '',
+      dateOfBirth:          dob || null,
+      nationalNumber:       nationalNumber || '',
+      passengerPhoneNumber: phone,
+    });
   });
 
   if (!valid) {
     document.getElementById('createError').style.display = 'flex';
     document.getElementById('createErrorMsg').textContent =
-      I18N.t('label_passenger_name') + ' / ' + I18N.t('label_phone');
+      (I18N.t('label_first_name') || 'First Name') + ' / ' +
+      (I18N.t('label_last_name')  || 'Last Name')  + ' / ' +
+      I18N.t('label_phone');
     return;
   }
 
@@ -938,7 +991,6 @@ async function submitCreate() {
     setBtnLoading('createBtn', 'createBtnLabel', 'createBtnLoading', false);
   }
 }
-
 // ═══════════════════════════════════════════════════════
 //  EDIT MODAL
 // ═══════════════════════════════════════════════════════
@@ -1114,11 +1166,13 @@ async function openPayModal(bookingId) {
   // Populate method dropdown
   const picker = document.getElementById('payMethodId');
   picker.innerHTML = `<option value="">${I18N.t('select_method') || 'Select method...'}</option>`;
-  payMethodsList.filter(m => m.isActive).forEach(m => {
-    const o = document.createElement('option');
-    o.value = m.id; o.textContent = m.name;
-    picker.appendChild(o);
-  });
+  payMethodsList
+    .filter(m => m.isActive && !(m.name || '').toLowerCase().includes('online'))
+    .forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id; o.textContent = m.name;
+      picker.appendChild(o);
+    });
 
   // Check if already paid — use cache first, then fetch
   if (paidBookingsCache[bookingId]) {

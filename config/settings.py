@@ -15,7 +15,7 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 # BUS_API_BASE = "https://busstation.bsite.net/api"
-BUS_API_BASE = "http://busstation.runasp.net/api"
+BUS_API_BASE = "https://busstation-001-site1.dtempurl.com/api"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
