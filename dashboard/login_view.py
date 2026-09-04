@@ -21,7 +21,7 @@ def login_view(request):
 
     # Already logged in → go to dashboard
     if request.session.get('bs_token'):
-        return redirect('dashboard:home')
+        return redirect('dashboard:bookings')
 
     if request.method == 'GET':
         return render(request, 'dashboard/login.html')
@@ -60,7 +60,7 @@ def login_view(request):
             request.session['bs_user_type'] = str(result.get('userTypeId', ''))
             request.session['bs_phone']     = phone_number
             request.session.set_expiry(86400)  # 24 hours
-            return redirect('dashboard:home')
+            return redirect('dashboard:bookings')
 
         # API returned error message
         errors = data.get('validationErrors', [])

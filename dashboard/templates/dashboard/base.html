@@ -89,32 +89,7 @@
 
     <div class="sidebar-section-label" data-i18n="section_operations">Operations</div>
     <nav class="sidebar-nav">
-      <a href="{% url 'dashboard:home' %}" class="nav-item {% block nav_home %}{% endblock %}">
-        <div class="nav-icon"><i class="fas fa-chart-pie"></i></div>
-        <span class="nav-label" data-i18n="nav_overview">Overview</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% if 'Permissions.BusRoute.View' in request.session.bs_permissions %}
-      <a href="{% url 'dashboard:routes_page' %}" class="nav-item {% block nav_routes %}{% endblock %}">
-        <div class="nav-icon"><i class="fas fa-route"></i></div>
-        <span class="nav-label" data-i18n="nav_routes">Routes</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% endif %}
-      {% if 'Permissions.TripSchedule.View' in request.session.bs_permissions %}
-      <a href="{% url 'dashboard:trip_schedules' %}" class="nav-item {% block nav_trip_schedules %}{% endblock %}">
-        <div class="nav-icon"><i class="fas fa-calendar-alt"></i></div>
-        <span class="nav-label" data-i18n="nav_trip_schedules">Trip Schedules</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% endif %}
-      {% if 'Permissions.TripInstance.View' in request.session.bs_permissions %}
-      <a href="{% url 'dashboard:trip_instances' %}" class="nav-item {% block nav_trip_instances %}{% endblock %}">
-        <div class="nav-icon"><i class="fas fa-ticket-alt"></i></div>
-        <span class="nav-label" data-i18n="nav_my_trips">My Trips</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% endif %}
+
       {% if 'Permissions.Booking.View' in request.session.bs_permissions %}
       <a href="{% url 'dashboard:bookings' %}" class="nav-item {% block nav_bookings %}{% endblock %}">
         <div class="nav-icon"><i class="fas fa-bookmark"></i></div>
@@ -122,22 +97,61 @@
         <div class="nav-indicator"></div>
       </a>
       {% endif %}
-      {% if 'Permissions.Payment.ViewAll' in request.session.bs_permissions %}
-      <a href="{% url 'dashboard:payments' %}" class="nav-item {% block nav_payments %}{% endblock %}">
-        <div class="nav-icon">
-          <i class="fas fa-money-bill-wave"></i>
+        <div class="nav-group" id="navGroupTrips">
+          <button class="nav-group-toggle"
+                  onclick="toggleNavGroup('navGroupTrips')"
+                  aria-expanded="false">
+            <div class="nav-group-left">
+              <div class="nav-icon"><i class="fas fa-cog"></i></div>
+              <span class="nav-label" data-i18n="nav_trip_settings">Trip Settings</span>
+            </div>
+            <i class="fas fa-chevron-down nav-group-chevron"></i>
+          </button>
+
+          <div class="nav-group-children" id="navGroupTripsChildren">
+
+            {% if 'Permissions.BusRoute.View' in request.session.bs_permissions %}
+            <a href="{% url 'dashboard:routes_page' %}" class="nav-item nav-child {% block nav_routes %}{% endblock %}">
+              <div class="nav-icon"><i class="fas fa-route"></i></div>
+              <span class="nav-label" data-i18n="nav_routes">Routes</span>
+              <div class="nav-indicator"></div>
+            </a>
+            {% endif %}
+
+            {% if 'Permissions.TripSchedule.View' in request.session.bs_permissions %}
+            <a href="{% url 'dashboard:trip_schedules' %}" class="nav-item nav-child {% block nav_trip_schedules %}{% endblock %}">
+              <div class="nav-icon"><i class="fas fa-calendar-alt"></i></div>
+              <span class="nav-label" data-i18n="nav_trip_schedules">Trip Schedules</span>
+              <div class="nav-indicator"></div>
+            </a>
+            {% endif %}
+
+            {% if 'Permissions.TripInstance.View' in request.session.bs_permissions %}
+            <a href="{% url 'dashboard:trip_instances' %}" class="nav-item nav-child {% block nav_trip_instances %}{% endblock %}">
+              <div class="nav-icon"><i class="fas fa-ticket-alt"></i></div>
+              <span class="nav-label" data-i18n="nav_my_trips">My Trips</span>
+              <div class="nav-indicator"></div>
+            </a>
+            {% endif %}
+
+            {% if 'Permissions.Payment.ViewAll' in request.session.bs_permissions %}
+            <a href="{% url 'dashboard:payments' %}" class="nav-item nav-child {% block nav_payments %}{% endblock %}">
+              <div class="nav-icon"><i class="fas fa-money-bill-wave"></i></div>
+              <span class="nav-label" data-i18n="nav_payments">Payments</span>
+              <div class="nav-indicator"></div>
+            </a>
+            {% endif %}
+
+            {% if 'Permissions.Bus.View' in request.session.bs_permissions %}
+            <a href="{% url 'dashboard:buses' %}" class="nav-item nav-child {% block nav_buses %}{% endblock %}">
+              <div class="nav-icon"><i class="fas fa-bus-alt"></i></div>
+              <span class="nav-label" data-i18n="nav_fleet">Fleet</span>
+              <div class="nav-indicator"></div>
+            </a>
+            {% endif %}
+
+          </div>
         </div>
-        <span class="nav-label" data-i18n="nav_payments">Payments</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% endif %}
-      {% if 'Permissions.Bus.View' in request.session.bs_permissions %}
-      <a href="{% url 'dashboard:buses' %}" class="nav-item {% block nav_buses %}{% endblock %}">
-        <div class="nav-icon"><i class="fas fa-bus-alt"></i></div>
-        <span class="nav-label" data-i18n="nav_fleet">Fleet</span>
-        <div class="nav-indicator"></div>
-      </a>
-      {% endif %}
     </nav>
 
     <div class="sidebar-section-label" data-i18n="section_management">Management</div>
